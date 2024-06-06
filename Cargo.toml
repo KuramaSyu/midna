@@ -1,0 +1,12 @@
+[package]
+name = "image2nord"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+env_logger = "0.11.3"
+image = "0.25.1"
+image-effects = "0.1.0"
+log = "0.4.21"
