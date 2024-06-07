@@ -53,6 +53,25 @@ impl RgbColor {
     
         std_dev  
     }
+    fn darken_rgb(&self, amount: f32) -> RgbColor {
+        // Clamp RGB values between 0 and 1
+        // Calculate darkened RGB values
+        let new_r = self.rn() - amount;
+        let new_g = self.gn() - amount;
+        let new_b = self.bn() - amount;
+    
+        // Clamp darkened RGB values between 0 and 1
+        let new_r = new_r.max(0.0).min(1.0);
+        let new_g = new_g.max(0.0).min(1.0);
+        let new_b = new_b.max(0.0).min(1.0);
+    
+        RgbColor {
+            r: (new_r * 255.0) as u8,
+            g: (new_g * 255.0) as u8,
+            b: (new_b * 255.0) as u8,
+        }
+    }
+    
 }
 
 struct NormalizedRgb {
@@ -120,11 +139,12 @@ impl Nord {
     }
 }
 
- 
-pub fn apply_nord(mut image: DynamicImage) {
-    debug!("{:?}", image.dimensions());
+
+pub fn apply_nord(mut _image: DynamicImage) -> DynamicImage {
+    let mut image = _image.clone();
+    println!("{:?}", image.dimensions());
     //image = image.grayscale();
-    let brightness = calculate_average_brightness(image.as_rgba8().unwrap());
+    let brightness = calculate_average_brightness(&image.to_rgba8());
     info!("Brightness of image is: {:.3}", brightness);
     if  brightness > 0.65 {
         image.invert();
@@ -135,29 +155,16 @@ pub fn apply_nord(mut image: DynamicImage) {
     let tint_g = 52;
     let tint_b = 64;
 
-    // Convert to the range 0.0-1.0
-    let tint = Rgb([
-        tint_r as f32 / 255.0,
-        tint_g as f32 / 255.0,
-        tint_b as f32 / 255.0,
-    ]);
-
-    // Define the Nord color in RGB format (normalized)
-    let nord_color = Rgb([
-        67 as f32 / 255.0,
-        76 as f32 / 255.0,
-        94 as f32 / 255.0,
-    ]);
-    // image = image.adjust_contrast(-4.5);
-    image = image.blur(0.2);
-    // image = image.adjust_contrast(5.);
-    
-    apply_nord_filter(image.as_mut_rgba8().unwrap(), 1.);
-    
-    // Define a blend factor (between 0.0 and 1.0)
-    //let blend_factor = 0.4;
-    //apply_tone(image.as_mut_rgba8().unwrap(), tint, blend_factor);
-    image.save("result.png");
+    //image = image.adjust_contrast(-4.5);
+    //image = image.blur(0.2);
+    //image = image.adjust_contrast(5.);
+    let mut mod_image = image.to_rgba8();
+    apply_sepia(&mut mod_image);
+    image = DynamicImage::from(mod_image);
+    image = image.huerotate(180);
+    mod_image = image.to_rgba8();
+    apply_nord_filter(&mut mod_image, 1.);
+    DynamicImage::from(mod_image)
 }
 
 
@@ -194,11 +201,34 @@ pub fn apply_tone(image: &mut RgbaImage, target_color: Rgb<f32>, blend_factor: f
     }
 }
 
-fn calculate_average_brightness(image: &RgbaImage) -> f32 {
-    let mut total_brightness = 0.0;
-    let num_pixels = image.width() * image.height();
+pub fn calculate_average_brightness(image: &RgbaImage) -> f32 {
+    // Define maximum dimensions for the resized image
+    const MAX_DIMENSION: u32 = 800;
 
-    for Rgba([r, g, b, _]) in image.pixels() {
+    // Calculate the aspect ratio and determine new dimensions
+    let (width, height) = image.dimensions();
+    let (new_width, new_height) = if width > height {
+        let new_width = MAX_DIMENSION;
+        let new_height = (height as f32 * new_width as f32 / width as f32) as u32;
+        (new_width, new_height)
+    } else {
+        let new_height = MAX_DIMENSION;
+        let new_width = (width as f32 * new_height as f32 / height as f32) as u32;
+        (new_width, new_height)
+    };
+
+    // Resize the image if it is larger than the maximum dimensions
+    let resized_image = if width > MAX_DIMENSION || height > MAX_DIMENSION {
+        DynamicImage::ImageRgba8(image.clone()).resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3)
+    } else {
+        DynamicImage::ImageRgba8(image.clone())
+    };
+
+    // Proceed with brightness calculation
+    let mut total_brightness = 0.0;
+    let num_pixels = resized_image.width() * resized_image.height();
+
+    for Rgba([r, g, b, _]) in resized_image.to_rgba8().pixels() {
         let brightness = calculate_avg_pixel_brightness(*r, *g, *b);
         total_brightness += brightness;
     }
@@ -215,15 +245,16 @@ pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
     let mut smallest_grey = f32::MAX;
     let mut biggest_grey = f32::MIN;
     let contrast_colors = vec![ 
-        PolarNight::c, PolarNight::b, PolarNight::c, PolarNight::d, 
-        SnowStorm::a, SnowStorm::c, SnowStorm::d, SnowStorm::b, 
+        PolarNight::a, PolarNight::b, PolarNight::c, PolarNight::d, 
+        // SnowStorm::a, SnowStorm::c, SnowStorm::d, SnowStorm::b, 
     ];
     let colorful_colors = vec![
         Frost::a, Frost::b, Frost::c, Frost::d
     ];
     for color in &contrast_colors {
-        debug!("{} {} {} has brightness {:.3}",color.r, color.g, color.b, color.brightness())
+        println!("{} {} {} has brightness {:.3}",color.r, color.g, color.b, color.brightness())
     }
+
     fn get_nearest_color<'a>(color: &RgbColor, all_colors: &'a Vec<RgbColor>) -> &'a RgbColor {
         let mut min_distance = f32::MAX;
         let mut nearest_color = &all_colors[0];
@@ -243,7 +274,11 @@ pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
         let orig_g = *g as f32 / 255.0;
         let orig_b = *b as f32 / 255.0;
         
-        let color = RgbColor {r: *r, g: *g, b: *b};
+        let mut color = RgbColor {r: *r, g: *g, b: *b};
+        let darken_by = (color.brightness() - 0.85).max(0.);
+        if darken_by > 0. {
+            color = color.darken_rgb(darken_by);
+        }
         let br = color.brightness();
         if color.calculate_grayscale_similarity() < smallest_grey {
             smallest_grey = color.calculate_grayscale_similarity()
@@ -252,35 +287,41 @@ pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
             biggest_grey = color.calculate_grayscale_similarity()
         }
         let new = {
-            if color.calculate_grayscale_similarity() < 0.15 {
+            if color.calculate_grayscale_similarity() < 0.25 {
                 get_nearest_color(&color, &contrast_colors)
             } else {
                 get_nearest_color(&color, &colorful_colors)
             }
             
         };
-        let multiplier = {
-            if color.calculate_grayscale_similarity() < 0.15 {
-                if color.brightness() > 0.4 {
-                    0.2
-                } else {
-                    0.85
-                }
-            } else {
-                0.9
-            }  
-        };
-        let strength =(1. - (br - new.brightness()).abs()) * multiplier ;
+        // let multiplier = {
+        //     if color.calculate_grayscale_similarity() < 0.25 {
+        //         // grayscale
+        //         if color.brightness() > 0.4 {
+        //             0.
+        //         } else {
+        //             1. - color.brightness()
+        //         }
+        //     } else {
+        //         1. - color.brightness()
+        //     }  
+        // };
+        let strength =(1. - (br - new.brightness()).abs());
 
-        let blended_r = (orig_r * (1.0 - strength) + new.rn() * strength) * 255.0;
-        let blended_g = (orig_g * (1.0 - strength) + new.gn() * strength) * 255.0;
-        let blended_b = (orig_b * (1.0 - strength) + new.bn() * strength) * 255.0;
+        let blended_r = (color.rn() * (1.0 - strength) + new.rn() * strength) * 255.0;
+        let blended_g = (color.gn() * (1.0 - strength) + new.gn() * strength) * 255.0;
+        let blended_b = (color.bn() * (1.0 - strength) + new.bn() * strength) * 255.0;
+        // let mut blended_r = (0.131 * *r as f32 + 0.272 * *g as f32 + 0.534 * *b as f32).min(255.0) as u8;
+        // let mut blended_g = (0.168 * *r as f32 + 0.349 * *g as f32 + 0.686 * *b as f32).min(255.0) as u8;
+        // let mut blended_b = (0.189 * *r as f32 + 0.393 * *g as f32 + 0.769 * *b as f32).min(255.0) as u8;
 
         // Update pixel values with blended colors
-        *r = blended_r.min(255.0) as u8;
-        *g = blended_g.min(255.0) as u8;
-        *b = blended_b.min(255.0) as u8;
+        *r = blended_r.min(255.) as u8;
+        *g = blended_g.min(255.) as u8;
+        *b = blended_b.min(255.) as u8;
     }
-    debug!("greyscale: {:.3} - {:.3}", smallest_grey, biggest_grey);
+    println!("greyscale: {:.3} - {:.3}", smallest_grey, biggest_grey);
 }
+    
+
 
