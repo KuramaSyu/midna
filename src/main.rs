@@ -2,7 +2,7 @@
 mod commands;
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
-use ::serenity::all::{Attachment, AttachmentType, CreateAttachment, CreateButton, CreateMessage, ReactionType};
+use ::serenity::all::{Attachment, AttachmentType, CreateAttachment, CreateButton, CreateMessage, Interaction, Message, ReactionType};
 use std::{
     collections::HashMap, fmt, io::Cursor, sync::{Arc, Mutex}, time::Duration
 };
@@ -39,6 +39,18 @@ async fn on_error(error: poise::FrameworkError<'_, Data, AsyncError>) {
                 println!("Error while handling error: {}", e)
             }
         }
+    }
+}
+
+async fn interaction_create(&self, ctx: serenity::Context, interaction: Interaction) {
+    if let Interaction::Component(interaction) = interaction {
+        let content = match interaction.data.custom_id.as_str() {
+            "button_1" => "You clicked Button 1",
+            "button_2" => "You clicked Button 2",
+            _ => "Unknown button",
+        };
+        // let builder = CreateMessage::new().
+        // interaction.create_response(&ctx.http, ).await.unwrap();
     }
 }
 
@@ -149,7 +161,7 @@ async fn event_handler(
                     "media type: {:?}; filename: {}; Size: {} MiB; URL: {}", 
                     attachment.content_type, attachment.filename, attachment.size as f64 / 1024.0 / 1024.0, attachment.url
                 );
-                let image = process_image(&attachment).await.unwrap();
+                let image = process_image(&attachment, &message).await.unwrap();
                 let mut buffer = Vec::new();
                 image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png).unwrap();
                 // Sends an embed with a link to the original image ~~and the prided image attached~~.\
@@ -165,7 +177,7 @@ async fn event_handler(
     Ok(())
 }
 
-async fn process_image(attachment: &serenity::Attachment) -> Result<DynamicImage> {
+async fn process_image(attachment: &serenity::Attachment, msg: &Message) -> Result<DynamicImage> {
     let mib = attachment.size as f64 / 1024.0 / 1024.0;
     if mib > 16.0 {
         bail!("File too large: {} MiB", mib);
@@ -179,6 +191,13 @@ async fn process_image(attachment: &serenity::Attachment) -> Result<DynamicImage
     }
     let url = attachment.url.clone();
     let mut image = download_image(&attachment).await?;
+    let bright = colors::calculate_average_brightness(&image.to_rgba8());
+    if bright > 0.4 {
+        bail!("Not bright enough: {bright}")
+    }
+    let response = CreateMessage::new()
+        .content("Bruhh...\n\nThis looks bright as fuck. May I darken it?")
+        .button(CreateButton::new(format!("darken-{}", )))
     // check brightness, ask user
     Ok(colors::apply_nord(image))
 }
