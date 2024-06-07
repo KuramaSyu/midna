@@ -2,7 +2,7 @@
 mod commands;
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
-use ::serenity::all::{Attachment, AttachmentType, CreateAttachment, CreateButton, CreateMessage, Interaction, Message, ReactionType};
+use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, EditInteractionResponse, Interaction, Message, ReactionType};
 use std::{
     collections::HashMap, fmt, io::Cursor, sync::{Arc, Mutex}, time::Duration
 };
@@ -17,6 +17,7 @@ type AsyncError = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, AsyncError>;
 use log::{info, warn, debug, Level::Debug, set_max_level};
 use failure::{Backtrace, Fail};
+use std::str::FromStr;
 
 mod colors;
 
@@ -42,18 +43,57 @@ async fn on_error(error: poise::FrameworkError<'_, Data, AsyncError>) {
     }
 }
 
-async fn interaction_create(&self, ctx: serenity::Context, interaction: Interaction) {
+async fn interaction_create(ctx: serenity::Context, interaction: Interaction) -> Option<()> {
     if let Interaction::Component(interaction) = interaction {
-        let content = match interaction.data.custom_id.as_str() {
-            "button_1" => "You clicked Button 1",
-            "button_2" => "You clicked Button 2",
-            _ => "Unknown button",
-        };
-        // let builder = CreateMessage::new().
-        // interaction.create_response(&ctx.http, ).await.unwrap();
+        let content = &interaction.data.custom_id;
+        if content.starts_with("darken-") {
+            handle_interaction_darkening(&ctx, &interaction).await?;
+        }
+        if content.starts_with("delete-") {
+
+            handle_dispose(&ctx, &interaction).await?;
+        }
+
+        return Some(())
     }
+    Some(())
 }
 
+async fn handle_interaction_darkening(ctx: &serenity::Context, interaction: &ComponentInteraction) -> Option<()> {
+    let content = &interaction.data.custom_id;
+    let message_id = content.split("-").last()?.parse::<u64>().ok()?;
+    // fetch message
+    let message = interaction.channel_id.message(&ctx.http, message_id).await.unwrap();
+    let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Well, then wait a second - or a few. I'm working on it."));
+    interaction.create_response(&ctx.http, response).await.ok()?;
+    for attachment in &message.attachments {
+        let image = process_image(&attachment, &message).await.unwrap();
+        let mut buffer = Vec::new();
+        image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png).unwrap();
+        // Sends an embed with a link to the original image ~~and the prided image attached~~.\
+        let attachment = CreateAttachment::bytes(buffer, "image.png");
+        let content = EditInteractionResponse::new()
+            .new_attachment(attachment)
+            .content("Here it is! May I delete your shiny one?")
+            .button(CreateButton::new(format!("delete-{}", message_id))
+                .style(ButtonStyle::Primary)
+                .emoji("🗑️".parse::<ReactionType>().unwrap())
+                .label("Dispose of the old!")
+            );
+        interaction.edit_response(&ctx, content).await.ok()?;
+    }
+    Some(())
+}
+
+async fn handle_dispose(ctx: &serenity::Context, interaction: &ComponentInteraction) -> Option<()> {
+    let content = &interaction.data.custom_id;
+    let message_id = content.split("-").last()?.parse::<u64>().ok()?;
+    // fetch message
+    interaction.channel_id.delete_message(&ctx, message_id).await.ok()?;
+    let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("I have thrown it deep into the void to never see it again. Enjoy the darkness!"));
+    interaction.create_response(&ctx, response).await.ok()?;
+    Some(())
+}
 
 #[tokio::main]
 async fn main() {
@@ -151,9 +191,12 @@ async fn event_handler(
         serenity::FullEvent::Ready { data_about_bot, .. } => {
             println!("Logged in as {}", data_about_bot.user.name);
         }
-        serenity::FullEvent::Message { new_message } => {
-            for attachment in &new_message.attachments {
-                if new_message.author.bot {
+        serenity::FullEvent::InteractionCreate { interaction, .. } => {
+            interaction_create(ctx.clone(), interaction.clone()).await;
+        }
+        serenity::FullEvent::Message { new_message: message } => {
+            for attachment in &message.attachments {
+                if message.author.bot {
                     continue;
                 }
                 println!("attachment found");
@@ -161,15 +204,7 @@ async fn event_handler(
                     "media type: {:?}; filename: {}; Size: {} MiB; URL: {}", 
                     attachment.content_type, attachment.filename, attachment.size as f64 / 1024.0 / 1024.0, attachment.url
                 );
-                let image = process_image(&attachment, &message).await.unwrap();
-                let mut buffer = Vec::new();
-                image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png).unwrap();
-                // Sends an embed with a link to the original image ~~and the prided image attached~~.\
-                let attachment = CreateAttachment::bytes(buffer, "image.png");
-                let content = CreateMessage::default().add_file(attachment).content("dark image");
-                new_message.channel_id
-                    .send_message(ctx, content)
-                    .await?;
+                ask_user_to_darken_image(&ctx, &message, &attachment).await?;
             }
         }
         _ => {}
@@ -177,7 +212,8 @@ async fn event_handler(
     Ok(())
 }
 
-async fn process_image(attachment: &serenity::Attachment, msg: &Message) -> Result<DynamicImage> {
+
+async fn image_check(attachment: &Attachment) -> Result<()> {
     let mib = attachment.size as f64 / 1024.0 / 1024.0;
     if mib > 16.0 {
         bail!("File too large: {} MiB", mib);
@@ -189,16 +225,31 @@ async fn process_image(attachment: &serenity::Attachment, msg: &Message) -> Resu
     if !content_type.starts_with("image/") {
         bail!("Attachment is not an image: {}", content_type);
     }
+    Ok(())
+}
+
+async fn ask_user_to_darken_image(ctx: &serenity::Context, message: &Message, attachment: &Attachment) -> Result<()> {
+    image_check(attachment).await?;
     let url = attachment.url.clone();
     let mut image = download_image(&attachment).await?;
     let bright = colors::calculate_average_brightness(&image.to_rgba8());
-    if bright > 0.4 {
+    if bright < 0.4 {
         bail!("Not bright enough: {bright}")
     }
     let response = CreateMessage::new()
         .content("Bruhh...\n\nThis looks bright as fuck. May I darken it?")
-        .button(CreateButton::new(format!("darken-{}", )))
-    // check brightness, ask user
+        .button(CreateButton::new(format!("darken-{}", message.id))
+            .style(ButtonStyle::Primary)
+            .emoji("🌙".parse::<ReactionType>().unwrap())
+        );
+    message.channel_id.send_message(ctx, response).await?;
+    Ok(())
+}
+
+async fn process_image(attachment: &serenity::Attachment, msg: &Message) -> Result<DynamicImage> {
+    image_check(attachment).await?;
+    let url = attachment.url.clone();
+    let mut image = download_image(&attachment).await?;
     Ok(colors::apply_nord(image))
 }
 
