@@ -203,27 +203,27 @@ pub fn apply_tone(image: &mut RgbaImage, target_color: Rgb<f32>, blend_factor: f
 
 pub fn calculate_average_brightness(image: &RgbaImage) -> f32 {
     // Define maximum dimensions for the resized image
-    const MAX_DIMENSION: u32 = 800;
+    // const MAX_DIMENSION: u32 = 800;
 
-    // Calculate the aspect ratio and determine new dimensions
-    let (width, height) = image.dimensions();
-    let (new_width, new_height) = if width > height {
-        let new_width = MAX_DIMENSION;
-        let new_height = (height as f32 * new_width as f32 / width as f32) as u32;
-        (new_width, new_height)
-    } else {
-        let new_height = MAX_DIMENSION;
-        let new_width = (width as f32 * new_height as f32 / height as f32) as u32;
-        (new_width, new_height)
-    };
+    // // Calculate the aspect ratio and determine new dimensions
+    // let (width, height) = image.dimensions();
+    // let (new_width, new_height) = if width > height {
+    //     let new_width = MAX_DIMENSION;
+    //     let new_height = (height as f32 * new_width as f32 / width as f32) as u32;
+    //     (new_width, new_height)
+    // } else {
+    //     let new_height = MAX_DIMENSION;
+    //     let new_width = (width as f32 * new_height as f32 / height as f32) as u32;
+    //     (new_width, new_height)
+    // };
 
-    // Resize the image if it is larger than the maximum dimensions
-    let resized_image = if width > MAX_DIMENSION || height > MAX_DIMENSION {
-        DynamicImage::ImageRgba8(image.clone()).resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3)
-    } else {
-        DynamicImage::ImageRgba8(image.clone())
-    };
-
+    // // Resize the image if it is larger than the maximum dimensions
+    // let resized_image = if width > MAX_DIMENSION || height > MAX_DIMENSION {
+    //     DynamicImage::ImageRgba8(image.clone()).resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3)
+    // } else {
+    //     DynamicImage::ImageRgba8(image.clone())
+    // };
+    let resized_image = DynamicImage::ImageRgba8(image.clone());
     // Proceed with brightness calculation
     let mut total_brightness = 0.0;
     let num_pixels = resized_image.width() * resized_image.height();
@@ -232,7 +232,6 @@ pub fn calculate_average_brightness(image: &RgbaImage) -> f32 {
         let brightness = calculate_avg_pixel_brightness(*r, *g, *b);
         total_brightness += brightness;
     }
-
     total_brightness / num_pixels as f32
 }
 
