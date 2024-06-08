@@ -192,9 +192,14 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
     }
     image = DynamicImage::from(mod_image);
     image = image.huerotate(options.hue_rotate as i32);
-    mod_image = image.to_rgba8();
-    apply_nord_filter(&mut mod_image, 1.);
-    DynamicImage::from(mod_image)
+
+    if options.nord {
+        mod_image = image.to_rgba8();
+        apply_nord_filter(&mut mod_image, 1.);
+        DynamicImage::from(mod_image)
+    } else {
+        image
+    }
 }
 
 
