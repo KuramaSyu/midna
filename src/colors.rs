@@ -1,4 +1,5 @@
 use image::{DynamicImage, GenericImageView, ImageResult, ImageBuffer, RgbaImage, Rgb, Rgba};
+use std::collections::HashMap;
 use std::{borrow::BorrowMut, io::Cursor};
 use env_logger::{Builder, Env};
 use log::{info, warn, debug, Level::Debug, set_max_level};
@@ -223,12 +224,17 @@ pub fn calculate_average_brightness(image: &RgbaImage) -> f32 {
     // } else {
     //     DynamicImage::ImageRgba8(image.clone())
     // };
+    let (width, height) = image.dimensions();
+    let sample_distance = (width / 50).max(10) as usize;
     let resized_image = DynamicImage::ImageRgba8(image.clone());
     // Proceed with brightness calculation
     let mut total_brightness = 0.0;
-    let num_pixels = resized_image.width() * resized_image.height();
+    let num_pixels = resized_image.width() * resized_image.height() / sample_distance.max(1 as usize) as u32;
 
-    for Rgba([r, g, b, _]) in resized_image.to_rgba8().pixels() {
+    for (i, Rgba([r, g, b, _])) in resized_image.to_rgba8().pixels().enumerate() {
+        if i % sample_distance != 0 {
+            continue;
+        }
         let brightness = calculate_avg_pixel_brightness(*r, *g, *b);
         total_brightness += brightness;
     }
@@ -240,87 +246,88 @@ pub fn calculate_avg_pixel_brightness(r: u8, g: u8, b: u8) -> f32 {
 }
 
 pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
-    // Define Nord color components normalized to the range 0.0-1.0
     let mut smallest_grey = f32::MAX;
     let mut biggest_grey = f32::MIN;
-    let contrast_colors = vec![ 
-        PolarNight::a, PolarNight::b, PolarNight::c, PolarNight::d, 
-        // SnowStorm::a, SnowStorm::c, SnowStorm::d, SnowStorm::b, 
+
+    let contrast_colors = vec![
+        PolarNight::a, PolarNight::b, PolarNight::c, PolarNight::d,
     ];
+
     let colorful_colors = vec![
-        Frost::a, Frost::b, Frost::c, Frost::d
+        Frost::a, Frost::b, Frost::c, Frost::d,
     ];
+
     for color in &contrast_colors {
-        println!("{} {} {} has brightness {:.3}",color.r, color.g, color.b, color.brightness())
+        println!("{} {} {} has brightness {:.3}", color.r, color.g, color.b, color.brightness());
     }
 
-    fn get_nearest_color<'a>(color: &RgbColor, all_colors: &'a Vec<RgbColor>) -> &'a RgbColor {
+    fn get_nearest_color<'a>(color: &RgbColor, all_colors: &'a [RgbColor]) -> &'a RgbColor {
         let mut min_distance = f32::MAX;
         let mut nearest_color = &all_colors[0];
         let br = color.brightness();
         for c in all_colors.iter() {
-            if (c.brightness() - br).abs() < min_distance {
-                min_distance = c.brightness();
+            let dist = (c.brightness() - br).abs();
+            if dist < min_distance {
+                min_distance = dist;
                 nearest_color = c;
             }
         }
         nearest_color
     }
-    // Loop through each pixel
+
+    let mut cache: HashMap<(u8, u8, u8), (u8, u8, u8)> = HashMap::new();
+
     for Rgba([r, g, b, _]) in image.pixels_mut() {
-        // Convert original RGB values to floats in the range 0.0-1.0
-        let orig_r = *r as f32 / 255.0;
-        let orig_g = *g as f32 / 255.0;
-        let orig_b = *b as f32 / 255.0;
-        
-        let mut color = RgbColor {r: *r, g: *g, b: *b};
-        let darken_by = (color.brightness() - 0.85).max(0.);
-        if darken_by > 0. {
-            color = color.darken_rgb(darken_by);
+        let key = (*r, *g, *b);
+        if let Some(&(cached_r, cached_g, cached_b)) = cache.get(&key) {
+            *r = cached_r;
+            *g = cached_g;
+            *b = cached_b;
+            continue;
         }
+
+        let color = RgbColor { r: *r, g: *g, b: *b };
         let br = color.brightness();
-        if color.calculate_grayscale_similarity() < smallest_grey {
-            smallest_grey = color.calculate_grayscale_similarity()
+        let grayscale_similarity = color.calculate_grayscale_similarity();
+
+        if grayscale_similarity < smallest_grey {
+            smallest_grey = grayscale_similarity;
         }
-        if color.calculate_grayscale_similarity() > biggest_grey {
-            biggest_grey = color.calculate_grayscale_similarity()
+        if grayscale_similarity > biggest_grey {
+            biggest_grey = grayscale_similarity;
         }
-        let new = {
-            if color.calculate_grayscale_similarity() < 0.25 {
-                get_nearest_color(&color, &contrast_colors)
-            } else {
-                get_nearest_color(&color, &colorful_colors)
-            }
-            
+
+        let darken_by = (br - 0.85).max(0.0);
+        let adjusted_color = if darken_by > 0.0 {
+            color.darken_rgb(darken_by)
+        } else {
+            color
         };
-        // let multiplier = {
-        //     if color.calculate_grayscale_similarity() < 0.25 {
-        //         // grayscale
-        //         if color.brightness() > 0.4 {
-        //             0.
-        //         } else {
-        //             1. - color.brightness()
-        //         }
-        //     } else {
-        //         1. - color.brightness()
-        //     }  
-        // };
-        let strength =(1. - (br - new.brightness()).abs());
 
-        let blended_r = (color.rn() * (1.0 - strength) + new.rn() * strength) * 255.0;
-        let blended_g = (color.gn() * (1.0 - strength) + new.gn() * strength) * 255.0;
-        let blended_b = (color.bn() * (1.0 - strength) + new.bn() * strength) * 255.0;
-        // let mut blended_r = (0.131 * *r as f32 + 0.272 * *g as f32 + 0.534 * *b as f32).min(255.0) as u8;
-        // let mut blended_g = (0.168 * *r as f32 + 0.349 * *g as f32 + 0.686 * *b as f32).min(255.0) as u8;
-        // let mut blended_b = (0.189 * *r as f32 + 0.393 * *g as f32 + 0.769 * *b as f32).min(255.0) as u8;
+        let nearest_color = if grayscale_similarity < 0.25 {
+            get_nearest_color(&adjusted_color, &contrast_colors)
+        } else {
+            get_nearest_color(&adjusted_color, &colorful_colors)
+        };
 
-        // Update pixel values with blended colors
-        *r = blended_r.min(255.) as u8;
-        *g = blended_g.min(255.) as u8;
-        *b = blended_b.min(255.) as u8;
+        let strength = 1.0 - (br - nearest_color.brightness()).abs();
+
+        let blended_r = (adjusted_color.rn() * (1.0 - strength) + nearest_color.rn() * strength) * 255.0;
+        let blended_g = (adjusted_color.gn() * (1.0 - strength) + nearest_color.gn() * strength) * 255.0;
+        let blended_b = (adjusted_color.bn() * (1.0 - strength) + nearest_color.bn() * strength) * 255.0;
+
+        let final_r = blended_r.min(255.0) as u8;
+        let final_g = blended_g.min(255.0) as u8;
+        let final_b = blended_b.min(255.0) as u8;
+
+        cache.insert(key, (final_r, final_g, final_b));
+
+        *r = final_r;
+        *g = final_g;
+        *b = final_b;
     }
+
     println!("greyscale: {:.3} - {:.3}", smallest_grey, biggest_grey);
 }
-    
 
 
