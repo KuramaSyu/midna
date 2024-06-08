@@ -3,7 +3,7 @@ mod commands;
 use colors::NordOptions;
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
-use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType};
+use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType};
 use std::{
     collections::HashMap, fmt, io::Cursor, sync::{Arc, Mutex}, time::Duration
 };
@@ -118,14 +118,19 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
         interaction.create_response(&ctx, response).await?;
         let response = EditInteractionResponse::new()
             .attachments(EditAttachments::keep_all(&interaction.message))
-            .content("I'm working on it. Please wait a moment.")
+            .content("⌛ I'm working on it. Please wait a moment.")
             .components(new_components.clone());
         interaction.edit_response(&ctx, response).await.unwrap();
     } else {
-        let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Well, then wait a second - or a few. I'm working on it."));
-        interaction.create_response(&ctx, response).await?;
+        //ack
+        let response = CreateInteractionResponse::UpdateMessage(
+            CreateInteractionResponseMessage::new()
+            .content("⌛ I'm working on it. Please wait a moment.")
+            .components(new_components.clone())
+        );
+        interaction.create_response(&ctx, response).await.unwrap();
     }
-
+    // sanduhr: 🕰️
     for attachment in &message.attachments {
         println!("Processing attachment");
         let image = process_image(&attachment, &message, ctx, data, options.clone()).await.unwrap();
@@ -209,7 +214,10 @@ async fn initial_clear_components(ctx: &SContext, interaction: &ComponentInterac
     // fetch message
     let response = CreateInteractionResponse::Acknowledge;
     interaction.create_response(&ctx, response).await?;
-    let response = EditInteractionResponse::new().attachments(EditAttachments::keep_all(&interaction.message)).content("Enjoy the darkness!");
+    let response = EditInteractionResponse::new()
+        .attachments(EditAttachments::keep_all(&interaction.message))
+        .content("")
+        .components(vec![]);
     interaction.edit_response(&ctx, response).await?;
     Ok(())
 }
