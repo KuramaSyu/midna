@@ -87,6 +87,11 @@ async fn interaction_create(ctx: SContext, interaction: Interaction, data: &Data
 
             handle_dispose(&ctx, &interaction).await.unwrap();
         }
+        if content.starts_with("stop-") {
+            let response = CreateInteractionResponse::UpdateMessage(CreateInteractionResponseMessage::default());
+            interaction.create_response(&ctx, response).await.unwrap();
+            interaction.delete_response(&ctx).await.unwrap();
+        }
 
         return Some(())
     }
@@ -129,7 +134,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
         let content = EditInteractionResponse::new()
             .new_attachment(attachment)
             .content("Here it is! May I delete your shiny one?")
-            .components(build_componets(message_id, vec![preset]))
+            .components(build_componets(message_id, vec![preset], update))
         ;
         // stone emoji: 
         println!("sending message");
@@ -138,16 +143,19 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     Ok(())
 }
 
-fn build_componets(message_id: u64, primary: Vec<&str>) -> Vec<CreateActionRow> {
+
+
+fn build_componets(message_id: u64, primary: Vec<&str>, update: bool) -> Vec<CreateActionRow> {
     let mut components = Vec::new();
+    let update: i32 = if update {1} else {0};
     components.push(
         CreateActionRow::Buttons(
             vec![
-                CreateButton::new(format!("darken-dark1-{}", message_id))
+                CreateButton::new(format!("darken-dark1-{}-{}", update, message_id))
                     .style(if primary.contains(&"dark1") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
                     .label("Default: Preset Dark")
                     .emoji("🌙".parse::<ReactionType>().unwrap()),
-                CreateButton::new(format!("darken-dark2-{}", message_id))
+                CreateButton::new(format!("darken-dark2-{}-{}", update, message_id))
                     .style(if primary.contains(&"dark2") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
                     .label("Preset Dark-Stone")
                     .emoji("🌙".parse::<ReactionType>().unwrap()),
@@ -157,11 +165,11 @@ fn build_componets(message_id: u64, primary: Vec<&str>) -> Vec<CreateActionRow> 
     components.push(
         CreateActionRow::Buttons(
             vec![
-                CreateButton::new(format!("darken-white1-{}", message_id))
+                CreateButton::new(format!("darken-white1-{}-{}", update, message_id))
                 .style(if primary.contains(&"white1") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
                     .label("Preset Nord Stone")
                     .emoji("🌙".parse::<ReactionType>().unwrap()),
-                CreateButton::new(format!("darken-white2-{}", message_id))
+                CreateButton::new(format!("darken-white2-{}-{}", update, message_id))
                 .style(if primary.contains(&"white2") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
                     .label("Preset Nord")
                     .emoji("🌙".parse::<ReactionType>().unwrap()),
@@ -172,14 +180,21 @@ fn build_componets(message_id: u64, primary: Vec<&str>) -> Vec<CreateActionRow> 
         CreateActionRow::Buttons(
             vec![
                 CreateButton::new(format!("delete-{}", message_id))
-                    .style(ButtonStyle::Primary)
+                    .style(ButtonStyle::Secondary)
                     .label("Dispose of the old!")
                     .emoji("🗑️".parse::<ReactionType>().unwrap()),
+                // stop button
+                CreateButton::new(format!("stop-{}", message_id))
+                    .style(ButtonStyle::Secondary)
+                    .label("Delete this")
             ]
         )
     );
     components
 }
+
+
+
 async fn handle_dispose(ctx: &SContext, interaction: &ComponentInteraction) -> Result<()> {
     let content = &interaction.data.custom_id;
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
@@ -195,6 +210,7 @@ async fn handle_dispose(ctx: &SContext, interaction: &ComponentInteraction) -> R
     interaction.create_response(&ctx, response).await?;
     Ok(())
 }
+
 
 #[tokio::main]
 async fn main() {
