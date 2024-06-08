@@ -103,10 +103,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     let content = &interaction.data.custom_id;
     let options = parse_nord_custom_id(&content);
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
-    let update = {
-        if content.split("-").nth(1).unwrap().parse::<i32>().unwrap_or(0) == 1 
-        { true } else { false }
-    };
+    let update = content.split("-").nth(1).unwrap().parse::<bool>().unwrap_or(true);
     // fetch message
     let message = interaction.channel_id.message(&ctx, message_id).await.unwrap();
     if update {
@@ -146,37 +143,38 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
 
 
 fn make_nord_custom_id(message_id: u64, update: bool, options: &colors::NordOptions) -> String {
-    format!("darken-{}-{}-{}-{}-{}", update, options.invert, options.hue_rotate, options.sepia, message_id)
+    format!("darken-{}-{}-{}-{}-{}-{}", update, options.invert, options.hue_rotate, options.sepia, options.nord, message_id)
 }
 
 fn parse_nord_custom_id(custom_id: &str) -> colors::NordOptions {
     let mut parts = custom_id.split("-").skip(1);
-    let _ = parts.next().unwrap().parse::<i32>().unwrap();
+    let _update = parts.next().unwrap().parse::<bool>().unwrap();
     let invert = parts.next().unwrap().parse::<bool>().unwrap();
     let hue_rotate = parts.next().unwrap().parse::<f32>().unwrap();
     let sepia = parts.next().unwrap().parse::<bool>().unwrap();
-    colors::NordOptions {invert, hue_rotate, sepia}
+    let nord = parts.next().unwrap().parse::<bool>().unwrap();
+    colors::NordOptions {invert, hue_rotate, sepia, nord}
 }
 
 fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) -> Vec<CreateActionRow> {
     let mut components = Vec::new();
-    let update: i32 = if update {1} else {0};
-    let custom_id = make_nord_custom_id(message_id, true, &options);
     let mut action_row = Vec::<CreateButton>::new();
     // make option lists, so that the clicked button is inverted
     let option_list = vec![
-        ("Invert", colors::NordOptions {invert: !options.invert, ..options}),
-        ("Hue Rotate", colors::NordOptions {hue_rotate: if options.hue_rotate == 180. {0.} else {180.}, ..options}),
-        ("Sepia", colors::NordOptions {sepia: !options.sepia, ..options}),
+        ("Invert", options.invert, colors::NordOptions {invert: !options.invert, ..options}),
+        ("Hue Rotate", if options.hue_rotate == 180. {true} else {false}, colors::NordOptions {hue_rotate: if options.hue_rotate == 180. {0.} else {180.}, ..options}),
+        ("Sepia", options.sepia, colors::NordOptions {sepia: !options.sepia, ..options}),
+        ("Nord", options.nord, colors::NordOptions {nord: !options.nord, ..options}),
     ];
-    for (label, option) in option_list {
+    for (label, enabled, option) in option_list {
         action_row.push(
-            CreateButton::new(make_nord_custom_id(message_id, true, &option))
+            CreateButton::new(make_nord_custom_id(message_id, update, &option))
                 .style(ButtonStyle::Secondary)
                 .label(&format!("{}", label))
+                .style(if enabled {ButtonStyle::Primary} else {ButtonStyle::Secondary})
         );
     }
-    // sun emoji: 
+    components.push(CreateActionRow::Buttons(action_row));
     components.push(
         CreateActionRow::Buttons(
             vec![
