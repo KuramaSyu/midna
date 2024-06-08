@@ -102,9 +102,8 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     let content = &interaction.data.custom_id;
     let options = parse_nord_custom_id(&content);
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
-    let preset = content.split("-").nth(1).unwrap();
     let update = {
-        if content.split("-").nth(2).unwrap().parse::<i32>().unwrap_or(0) == 1 
+        if content.split("-").nth(1).unwrap().parse::<i32>().unwrap_or(0) == 1 
         { true } else { false }
     };
     // fetch message
@@ -121,7 +120,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
 
     for attachment in &message.attachments {
         println!("Processing attachment");
-        let image = process_image(&attachment, &message, ctx, data, preset).await.unwrap();
+        let image = process_image(&attachment, &message, ctx, data, options.clone()).await.unwrap();
         println!("writing image to buffer");
         let mut buffer = Vec::new();
             // Create a PNG encoder with a specific compression level
@@ -145,12 +144,13 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
 }
 
 
-fn make_nord_custom_id(message_id: u64, options: &colors::NordOptions) -> String {
-    format!("darken-{}-{}-{}-{}", options.invert, options.hue_rotate, options.sepia, message_id)
+fn make_nord_custom_id(message_id: u64, update: bool, options: &colors::NordOptions) -> String {
+    format!("darken-{}-{}-{}-{}-{}", update, options.invert, options.hue_rotate, options.sepia, message_id)
 }
 
 fn parse_nord_custom_id(custom_id: &str) -> colors::NordOptions {
     let mut parts = custom_id.split("-").skip(1);
+    let _ = parts.next().unwrap().parse::<i32>().unwrap();
     let invert = parts.next().unwrap().parse::<bool>().unwrap();
     let hue_rotate = parts.next().unwrap().parse::<f32>().unwrap();
     let sepia = parts.next().unwrap().parse::<bool>().unwrap();
@@ -160,7 +160,7 @@ fn parse_nord_custom_id(custom_id: &str) -> colors::NordOptions {
 fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) -> Vec<CreateActionRow> {
     let mut components = Vec::new();
     let update: i32 = if update {1} else {0};
-    let custom_id = make_nord_custom_id(message_id, &options);
+    let custom_id = make_nord_custom_id(message_id, true, &options);
     let mut action_row = Vec::<CreateButton>::new();
     // make option lists, so that the clicked button is inverted
     let option_list = vec![
@@ -170,7 +170,7 @@ fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) 
     ];
     for (label, option) in option_list {
         action_row.push(
-            CreateButton::new(make_nord_custom_id(message_id, &option))
+            CreateButton::new(make_nord_custom_id(message_id, true, &option))
                 .style(ButtonStyle::Secondary)
                 .label(&format!("{}", label))
         );
@@ -375,7 +375,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
     Ok(())
 }
 
-async fn process_image(attachment: &serenity::Attachment, msg: &Message, ctx: &SContext, data: &Data, preset: &str) -> Result<DynamicImage> {
+async fn process_image(attachment: &serenity::Attachment, msg: &Message, ctx: &SContext, data: &Data, options: colors::NordOptions) -> Result<DynamicImage> {
     image_check(attachment).await?;
     let url = attachment.url.clone();
     let mut image = {
@@ -384,20 +384,6 @@ async fn process_image(attachment: &serenity::Attachment, msg: &Message, ctx: &S
             download_image(&attachment).await
         } else {
             Ok(image.unwrap())
-        }
-    };
-    let options = {
-        let default = colors::NordOptions {invert: true, hue_rotate: 180., sepia: true};
-        if preset == "dark1" {
-            colors::NordOptions {invert: true, hue_rotate: 180., sepia: true}
-        } else if preset == "dark2" {
-            colors::NordOptions {invert: true, hue_rotate: 0., sepia: true}
-        } else if preset == "white1" {
-            colors::NordOptions {invert: false, hue_rotate: 0., sepia: true}
-        } else if preset == "white2" {
-            colors::NordOptions {invert: false, hue_rotate: 180., sepia: true}
-        } else {
-            default
         }
     };
     Ok(colors::apply_nord(image?, options))
