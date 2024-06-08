@@ -74,7 +74,7 @@ async fn handle_interaction_darkening(ctx: &serenity::Context, interaction: &Com
             // Create a PNG encoder with a specific compression level
         {
             let mut cursor = Cursor::new(&mut buffer);
-            let encoder = PngEncoder::new_with_quality(&mut cursor, CompressionType::Fast, FilterType::NoFilter);
+            let encoder = PngEncoder::new_with_quality(&mut cursor, CompressionType::Best, FilterType::NoFilter);
             encoder.write_image(&image.as_bytes(), image.width(), image.height(), image::ExtendedColorType::Rgba8).unwrap();
         }
         //image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png).unwrap();
