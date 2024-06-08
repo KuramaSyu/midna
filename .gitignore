@@ -18,5 +18,11 @@ Cargo.lock
 
 /target
 *.png
+# Ignore .env files
 .env
-/*env
+
+# Ignore other environment files
+*.env
+
+# Ignore all .env files in all directories
+**/*.env
