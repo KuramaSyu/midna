@@ -9,6 +9,8 @@ pub fn get_image() -> ImageResult<DynamicImage> {
     
     ImageReader::open("test.png")?.decode()
 }
+// implement clone
+#[derive(Clone, Debug)]
 pub struct NordOptions {
     pub invert: bool,
     pub hue_rotate: f32,
