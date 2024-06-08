@@ -344,7 +344,7 @@ pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
             get_nearest_color(&adjusted_color, &colorful_colors)
         };
 
-        let strength = 1.0 - (br - nearest_color.brightness()).abs();
+        let strength = 1.0 - (br - nearest_color.brightness()).abs() * 0.8;
 
         let blended_r = (adjusted_color.rn() * (1.0 - strength) + nearest_color.rn() * strength) * 255.0;
         let blended_g = (adjusted_color.gn() * (1.0 - strength) + nearest_color.gn() * strength) * 255.0;
