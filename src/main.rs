@@ -85,16 +85,16 @@ async fn interaction_create(ctx: SContext, interaction: Interaction, data: &Data
             handle_interaction_darkening(&ctx, &interaction, data).await.unwrap();
         }
         if content.starts_with("delete-") {
-
             handle_dispose(&ctx, &interaction).await.unwrap();
+        }
+        if content.starts_with("clear-") {
+            initial_clear_components(&ctx, &interaction).await.unwrap();
         }
         if content.starts_with("stop-") {
             let response = CreateInteractionResponse::UpdateMessage(CreateInteractionResponseMessage::default());
             interaction.create_response(&ctx, response).await.unwrap();
             interaction.delete_response(&ctx).await.unwrap();
         }
-
-        return Some(())
     }
     Some(())
 }
@@ -195,7 +195,10 @@ fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) 
                 // stop button
                 CreateButton::new(format!("stop-{}", message_id))
                     .style(ButtonStyle::Secondary)
-                    .label("Delete this")
+                    .label("Dispose of this"),
+                CreateButton::new(format!("clear-{}", message_id))
+                    .style(ButtonStyle::Secondary)
+                    .label("Keep both")
             ]
         )
     );
@@ -385,7 +388,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
             .style(ButtonStyle::Primary)
             .label("No")
         );
-    message.channel_id.send_message(ctx, response).await?;
+    let new_message = message.channel_id.send_message(ctx, response).await?;
     
     // Spawn a new task to delete the message after 5 minutes
     let ctx_clone = ctx.clone();
@@ -394,7 +397,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
 
     tokio::spawn(async move {
         sleep(Duration::from_secs(300)).await;
-        if let Err(err) = channel_id.delete_message(&ctx_clone, message_id).await {
+        if let Err(err) = new_message.delete(ctx_clone).await {
             eprintln!("Failed to delete message: {:?}", err);
         }
     });
