@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  rust-backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/usr/src/app
+    command: ["./target/release/image2nord"]
