@@ -403,12 +403,12 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
     let channel_id = message.channel_id;
     let message_id = message.id;
 
-    tokio::spawn(async move {
-        sleep(Duration::from_secs(300)).await;
-        if let Err(err) = new_message.delete(ctx_clone).await {
-            eprintln!("Failed to delete message: {:?}", err);
-        }
-    });
+    // tokio::spawn(async move {
+    //     sleep(Duration::from_secs(300)).await;
+    //     if let Err(err) = new_message.delete(ctx_clone).await {
+    //         eprintln!("Failed to delete message: {:?}", err);
+    //     }
+    // });
 
     Ok(())
 }
