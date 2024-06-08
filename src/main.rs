@@ -11,7 +11,7 @@ use anyhow::{bail, Result};
 use thiserror::Error;
 use reqwest;
 use image::{codecs::png::{CompressionType, FilterType, PngEncoder}, load_from_memory, DynamicImage, ImageEncoder, ImageFormat};
-use tokio::{io::AsyncWriteExt, runtime::Runtime};
+use tokio::{io::AsyncWriteExt, runtime::Runtime, time::sleep};
 
 // Types used by all command functions
 type AsyncError = Box<dyn std::error::Error + Send + Sync>;
@@ -104,20 +104,28 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     let options = parse_nord_custom_id(&content);
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
     let update = content.split("-").nth(1).unwrap().parse::<bool>().unwrap_or(true);
+    let new_components = build_componets(message_id, options.clone(), true);
     // fetch message
-    let message = interaction.channel_id.message(&ctx, message_id).await.unwrap();
+    if let Err(err) = interaction.channel_id.message(&ctx, message_id).await {
+        let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new()
+            .content("Seems like the bright picture has vanished. I can't darken what I can't see.")
+        );
+        interaction.create_response(&ctx, response).await?;
+    }
+    let message = interaction.channel_id.message(&ctx, message_id).await?;
     if update {
         let response = CreateInteractionResponse::UpdateMessage(CreateInteractionResponseMessage::new()
             .content("Well, then wait a second - or a few. I'm working on it.")
-            .add_file(
-                CreateAttachment::url(
-                    &ctx, 
-                    interaction.message.attachments
-                        .first()
-                        .expect("Message has no attachment -> can't add it in preview.")
-                        .url.as_str()
-                ).await?
-            )
+            // .add_file(
+            //     CreateAttachment::url(
+            //         &ctx, 
+            //         interaction.message.attachments
+            //             .first()
+            //             .expect("Message has no attachment -> can't add it in preview.")
+            //             .url.as_str()
+            //     ).await?
+            // )
+            .components(new_components.clone())
         );
         interaction.create_response(&ctx, response).await?;
     } else {
@@ -141,7 +149,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
         let content = EditInteractionResponse::new()
             .new_attachment(attachment)
             .content("Here it is! May I delete your shiny one?")
-            .components(build_componets(message_id, options.clone(), true))
+            .components(new_components.clone())
         ;
         // stone emoji: 
         println!("sending message");
@@ -370,7 +378,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
         bail!("Not bright enough: {bright}")
     }
     let response = CreateMessage::new()
-        .content("Bruhh...\n\nThis looks bright as fuck. May I darken it?")
+        .content(format!("Bruhh...\n\nThis looks bright as fuck. On a scale from 1 to 9 it's a {:.1}.\nMay I darken it?", bright*9.))
         .button(CreateButton::new(make_nord_custom_id(message.id.into(), false, &NordOptions::default()))
             .style(ButtonStyle::Primary)
             .emoji("🌙".parse::<ReactionType>().unwrap())
@@ -380,6 +388,19 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
             .label("No")
         );
     message.channel_id.send_message(ctx, response).await?;
+    
+    // Spawn a new task to delete the message after 5 minutes
+    let ctx_clone = ctx.clone();
+    let channel_id = message.channel_id;
+    let message_id = message.id;
+
+    tokio::spawn(async move {
+        sleep(Duration::from_secs(300)).await;
+        if let Err(err) = channel_id.delete_message(&ctx_clone, message_id).await {
+            eprintln!("Failed to delete message: {:?}", err);
+        }
+    });
+
     Ok(())
 }
 
