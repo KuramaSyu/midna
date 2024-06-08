@@ -134,7 +134,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
         let content = EditInteractionResponse::new()
             .new_attachment(attachment)
             .content("Here it is! May I delete your shiny one?")
-            .components(build_componets(message_id, vec![preset], update))
+            .components(build_componets(message_id, vec![preset], true))
         ;
         // stone emoji: 
         println!("sending message");
@@ -168,14 +168,15 @@ fn build_componets(message_id: u64, primary: Vec<&str>, update: bool) -> Vec<Cre
                 CreateButton::new(format!("darken-white1-{}-{}", update, message_id))
                 .style(if primary.contains(&"white1") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
                     .label("Preset Nord Stone")
-                    .emoji("🌙".parse::<ReactionType>().unwrap()),
+                    .emoji("🔆".parse::<ReactionType>().unwrap()), 
                 CreateButton::new(format!("darken-white2-{}-{}", update, message_id))
                 .style(if primary.contains(&"white2") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
                     .label("Preset Nord")
-                    .emoji("🌙".parse::<ReactionType>().unwrap()),
+                    .emoji("🔆".parse::<ReactionType>().unwrap()),
             ]
         )
     );
+    // sun emoji: 
     components.push(
         CreateActionRow::Buttons(
             vec![
@@ -366,6 +367,10 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
         .button(CreateButton::new(format!("darken-dark1-0-{}", message.id))
             .style(ButtonStyle::Primary)
             .emoji("🌙".parse::<ReactionType>().unwrap())
+        )
+        .button(CreateButton::new(format!("stop-{}", message.id))
+            .style(ButtonStyle::Primary)
+            .label("No")
         );
     message.channel_id.send_message(ctx, response).await?;
     Ok(())
