@@ -17,6 +17,23 @@ pub struct NordOptions {
     pub sepia: bool,
 }
 
+impl NordOptions {
+    pub fn new() -> Self {
+        NordOptions {
+            invert: false,
+            hue_rotate: 0.0,
+            sepia: false,
+        }
+    }
+    pub fn default() -> Self {
+        NordOptions {
+            invert: true,
+            hue_rotate: 180.0,
+            sepia: true,
+        }
+    }
+}
+
 struct RgbColor {
     r: u8,
     g: u8,
