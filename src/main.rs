@@ -9,7 +9,7 @@ use std::{
 use anyhow::{bail, Result};
 use thiserror::Error;
 use reqwest;
-use image::{DynamicImage, load_from_memory, ImageFormat};
+use image::{codecs::png::{CompressionType, FilterType, PngEncoder}, load_from_memory, DynamicImage, ImageEncoder, ImageFormat};
 use tokio::{io::AsyncWriteExt, runtime::Runtime};
 
 // Types used by all command functions
@@ -67,10 +67,19 @@ async fn handle_interaction_darkening(ctx: &serenity::Context, interaction: &Com
     let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Well, then wait a second - or a few. I'm working on it."));
     interaction.create_response(&ctx.http, response).await.ok()?;
     for attachment in &message.attachments {
+        println!("Processing attachment");
         let image = process_image(&attachment, &message).await.unwrap();
+        println!("writing image to buffer");
         let mut buffer = Vec::new();
-        image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png).unwrap();
+            // Create a PNG encoder with a specific compression level
+        {
+            let mut cursor = Cursor::new(&mut buffer);
+            let encoder = PngEncoder::new_with_quality(&mut cursor, CompressionType::Fast, FilterType::NoFilter);
+            encoder.write_image(&image.as_bytes(), image.width(), image.height(), image::ExtendedColorType::Rgba8).unwrap();
+        }
+        //image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png).unwrap();
         // Sends an embed with a link to the original image ~~and the prided image attached~~.\
+        
         let attachment = CreateAttachment::bytes(buffer, "image.png");
         let content = EditInteractionResponse::new()
             .new_attachment(attachment)
@@ -80,6 +89,7 @@ async fn handle_interaction_darkening(ctx: &serenity::Context, interaction: &Com
                 .emoji("🗑️".parse::<ReactionType>().unwrap())
                 .label("Dispose of the old!")
             );
+        println!("sending message");
         interaction.edit_response(&ctx, content).await.ok()?;
     }
     Some(())
