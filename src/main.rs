@@ -108,7 +108,16 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     let message = interaction.channel_id.message(&ctx, message_id).await.unwrap();
     if update {
         let response = CreateInteractionResponse::UpdateMessage(CreateInteractionResponseMessage::new()
-            .content("I'm working on it. Please wait a second.")
+            .content("Well, then wait a second - or a few. I'm working on it.")
+            .add_file(
+                CreateAttachment::url(
+                    &ctx, 
+                    interaction.message.attachments
+                        .first()
+                        .expect("Message has no attachment -> can't add it in preview.")
+                        .url.as_str()
+                ).await?
+            )
         );
         interaction.create_response(&ctx, response).await?;
     } else {
