@@ -85,7 +85,8 @@ async fn interaction_create(ctx: SContext, interaction: Interaction, data: &Data
             handle_interaction_darkening(&ctx, &interaction, data).await.unwrap();
         }
         if content.starts_with("delete-") {
-            handle_dispose(&ctx, &interaction).await.unwrap();
+            let message_id = content.split("-").last().unwrap().parse::<u64>().unwrap();
+            handle_dispose(&ctx, &interaction, message_id).await.unwrap();
         }
         if content.starts_with("clear-") {
             initial_clear_components(&ctx, &interaction).await.unwrap();
@@ -222,17 +223,17 @@ async fn initial_clear_components(ctx: &SContext, interaction: &ComponentInterac
     Ok(())
 }
 
-async fn handle_dispose(ctx: &SContext, interaction: &ComponentInteraction) -> Result<()> {
+async fn handle_dispose(ctx: &SContext, interaction: &ComponentInteraction, message_id: u64) -> Result<()> {
     let content = &interaction.data.custom_id;
     initial_clear_components(&ctx, &interaction).await?;
     // fetch message
-    interaction.channel_id.delete_message(&ctx, interaction.message.id).await?;
-    let response = CreateInteractionResponse::Message(
-        CreateInteractionResponseMessage::new()
+    interaction.channel_id.delete_message(&ctx, message_id).await?;
+    let response =
+        CreateInteractionResponseFollowup::new()
         .content("I have thrown it deep into the void to never see it again. Enjoy the darkness!")
         .ephemeral(true)
-    );
-    interaction.create_response(&ctx, response).await?;
+    ;
+    interaction.create_followup(&ctx, response).await?;
     Ok(())
 }
 
