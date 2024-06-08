@@ -9,6 +9,11 @@ pub fn get_image() -> ImageResult<DynamicImage> {
     
     ImageReader::open("test.png")?.decode()
 }
+pub struct NordOptions {
+    pub invert: bool,
+    pub hue_rotate: f32,
+    pub sepia: bool,
+}
 
 struct RgbColor {
     r: u8,
@@ -141,13 +146,13 @@ impl Nord {
 }
 
 
-pub fn apply_nord(mut _image: DynamicImage) -> DynamicImage {
+pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImage {
     let mut image = _image.clone();
     println!("{:?}", image.dimensions());
     //image = image.grayscale();
     let brightness = calculate_average_brightness(&image.to_rgba8());
     info!("Brightness of image is: {:.3}", brightness);
-    if  brightness > 0.65 {
+    if  brightness > 0.65 && options.invert {
         image.invert();
     }
 
@@ -160,9 +165,11 @@ pub fn apply_nord(mut _image: DynamicImage) -> DynamicImage {
     //image = image.blur(0.2);
     //image = image.adjust_contrast(5.);
     let mut mod_image = image.to_rgba8();
-    apply_sepia(&mut mod_image);
+    if options.sepia {
+        apply_sepia(&mut mod_image);
+    }
     image = DynamicImage::from(mod_image);
-    image = image.huerotate(180);
+    image = image.huerotate(options.hue_rotate as i32);
     mod_image = image.to_rgba8();
     apply_nord_filter(&mut mod_image, 1.);
     DynamicImage::from(mod_image)
