@@ -1,5 +1,6 @@
 #![warn(clippy::str_to_string)]
 mod commands;
+use colors::NordOptions;
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
 use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType};
@@ -363,7 +364,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
     }
     let response = CreateMessage::new()
         .content("Bruhh...\n\nThis looks bright as fuck. May I darken it?")
-        .button(CreateButton::new(format!("darken-dark1-0-{}", message.id))
+        .button(CreateButton::new(make_nord_custom_id(message.id.into(), false, &NordOptions::default()))
             .style(ButtonStyle::Primary)
             .emoji("🌙".parse::<ReactionType>().unwrap())
         )
