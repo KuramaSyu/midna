@@ -2,7 +2,7 @@
 mod commands;
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
-use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType};
+use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType};
 use std::{
     collections::HashMap, fmt, io::Cursor, sync::{Arc, Mutex}, time::Duration
 };
@@ -129,14 +129,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
         let content = EditInteractionResponse::new()
             .new_attachment(attachment)
             .content("Here it is! May I delete your shiny one?")
-            .button(CreateButton::new(format!("delete-{}", message_id))
-                .style(ButtonStyle::Primary)
-                .emoji("🗑️".parse::<ReactionType>().unwrap())
-                .label("Dispose of the old!"))
-            .button(CreateButton::new(format!("darken-dark2-1-{}", message_id))
-                .style(ButtonStyle::Primary)
-                .emoji("🪨".parse::<ReactionType>().unwrap())
-                .label("Dark Stone Preset"))
+            .components(build_componets(message_id, vec![preset]))
         ;
         // stone emoji: 
         println!("sending message");
@@ -145,6 +138,48 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     Ok(())
 }
 
+fn build_componets(message_id: u64, primary: Vec<&str>) -> Vec<CreateActionRow> {
+    let mut components = Vec::new();
+    components.push(
+        CreateActionRow::Buttons(
+            vec![
+                CreateButton::new(format!("darken-dark1-{}", message_id))
+                    .style(if primary.contains(&"dark1") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
+                    .label("Default: Preset Dark")
+                    .emoji("🌙".parse::<ReactionType>().unwrap()),
+                CreateButton::new(format!("darken-dark2-{}", message_id))
+                    .style(if primary.contains(&"dark2") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
+                    .label("Preset Dark-Stone")
+                    .emoji("🌙".parse::<ReactionType>().unwrap()),
+            ]
+        )
+    );
+    components.push(
+        CreateActionRow::Buttons(
+            vec![
+                CreateButton::new(format!("darken-white1-{}", message_id))
+                .style(if primary.contains(&"white1") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
+                    .label("Preset Nord Stone")
+                    .emoji("🌙".parse::<ReactionType>().unwrap()),
+                CreateButton::new(format!("darken-white2-{}", message_id))
+                .style(if primary.contains(&"white2") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
+                    .label("Preset Nord")
+                    .emoji("🌙".parse::<ReactionType>().unwrap()),
+            ]
+        )
+    );
+    components.push(
+        CreateActionRow::Buttons(
+            vec![
+                CreateButton::new(format!("delete-{}", message_id))
+                    .style(ButtonStyle::Primary)
+                    .label("Dispose of the old!")
+                    .emoji("🗑️".parse::<ReactionType>().unwrap()),
+            ]
+        )
+    );
+    components
+}
 async fn handle_dispose(ctx: &SContext, interaction: &ComponentInteraction) -> Result<()> {
     let content = &interaction.data.custom_id;
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
