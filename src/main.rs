@@ -100,6 +100,7 @@ async fn interaction_create(ctx: SContext, interaction: Interaction, data: &Data
 
 async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInteraction, data: &Data) -> Result<()> {
     let content = &interaction.data.custom_id;
+    let options = parse_nord_custom_id(&content);
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
     let preset = content.split("-").nth(1).unwrap();
     let update = {
@@ -134,7 +135,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
         let content = EditInteractionResponse::new()
             .new_attachment(attachment)
             .content("Here it is! May I delete your shiny one?")
-            .components(build_componets(message_id, vec![preset], true))
+            .components(build_componets(message_id, options.clone(), true))
         ;
         // stone emoji: 
         println!("sending message");
@@ -144,38 +145,36 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
 }
 
 
+fn make_nord_custom_id(message_id: u64, options: &colors::NordOptions) -> String {
+    format!("darken-{}-{}-{}-{}", options.invert, options.hue_rotate, options.sepia, message_id)
+}
 
-fn build_componets(message_id: u64, primary: Vec<&str>, update: bool) -> Vec<CreateActionRow> {
+fn parse_nord_custom_id(custom_id: &str) -> colors::NordOptions {
+    let mut parts = custom_id.split("-").skip(1);
+    let invert = parts.next().unwrap().parse::<bool>().unwrap();
+    let hue_rotate = parts.next().unwrap().parse::<f32>().unwrap();
+    let sepia = parts.next().unwrap().parse::<bool>().unwrap();
+    colors::NordOptions {invert, hue_rotate, sepia}
+}
+
+fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) -> Vec<CreateActionRow> {
     let mut components = Vec::new();
     let update: i32 = if update {1} else {0};
-    components.push(
-        CreateActionRow::Buttons(
-            vec![
-                CreateButton::new(format!("darken-dark1-{}-{}", update, message_id))
-                    .style(if primary.contains(&"dark1") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
-                    .label("Default: Preset Dark")
-                    .emoji("🌙".parse::<ReactionType>().unwrap()),
-                CreateButton::new(format!("darken-dark2-{}-{}", update, message_id))
-                    .style(if primary.contains(&"dark2") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
-                    .label("Preset Dark-Stone")
-                    .emoji("🌙".parse::<ReactionType>().unwrap()),
-            ]
-        )
-    );
-    components.push(
-        CreateActionRow::Buttons(
-            vec![
-                CreateButton::new(format!("darken-white1-{}-{}", update, message_id))
-                .style(if primary.contains(&"white1") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
-                    .label("Preset Nord Stone")
-                    .emoji("🔆".parse::<ReactionType>().unwrap()), 
-                CreateButton::new(format!("darken-white2-{}-{}", update, message_id))
-                .style(if primary.contains(&"white2") {ButtonStyle::Primary} else {ButtonStyle::Secondary})
-                    .label("Preset Nord")
-                    .emoji("🔆".parse::<ReactionType>().unwrap()),
-            ]
-        )
-    );
+    let custom_id = make_nord_custom_id(message_id, &options);
+    let mut action_row = Vec::<CreateButton>::new();
+    // make option lists, so that the clicked button is inverted
+    let option_list = vec![
+        ("Invert", colors::NordOptions {invert: !options.invert, ..options}),
+        ("Hue Rotate", colors::NordOptions {hue_rotate: if options.hue_rotate == 180. {0.} else {180.}, ..options}),
+        ("Sepia", colors::NordOptions {sepia: !options.sepia, ..options}),
+    ];
+    for (label, option) in option_list {
+        action_row.push(
+            CreateButton::new(make_nord_custom_id(message_id, &option))
+                .style(ButtonStyle::Secondary)
+                .label(&format!("{}", label))
+        );
+    }
     // sun emoji: 
     components.push(
         CreateActionRow::Buttons(
@@ -393,6 +392,10 @@ async fn process_image(attachment: &serenity::Attachment, msg: &Message, ctx: &S
             colors::NordOptions {invert: true, hue_rotate: 180., sepia: true}
         } else if preset == "dark2" {
             colors::NordOptions {invert: true, hue_rotate: 0., sepia: true}
+        } else if preset == "white1" {
+            colors::NordOptions {invert: false, hue_rotate: 0., sepia: true}
+        } else if preset == "white2" {
+            colors::NordOptions {invert: false, hue_rotate: 180., sepia: true}
         } else {
             default
         }
