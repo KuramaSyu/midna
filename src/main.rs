@@ -114,20 +114,13 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     }
     let message = interaction.channel_id.message(&ctx, message_id).await?;
     if update {
-        let response = CreateInteractionResponse::UpdateMessage(CreateInteractionResponseMessage::new()
-            .content("Well, then wait a second - or a few. I'm working on it.")
-            // .add_file(
-            //     CreateAttachment::url(
-            //         &ctx, 
-            //         interaction.message.attachments
-            //             .first()
-            //             .expect("Message has no attachment -> can't add it in preview.")
-            //             .url.as_str()
-            //     ).await?
-            // )
-            .components(new_components.clone())
-        );
+        let response = CreateInteractionResponse::Acknowledge;
         interaction.create_response(&ctx, response).await?;
+        let response = EditInteractionResponse::new()
+            .attachments(EditAttachments::keep_all(&interaction.message))
+            .content("I'm working on it. Please wait a moment.")
+            .components(new_components.clone());
+        interaction.edit_response(&ctx, response).await.unwrap();
     } else {
         let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("Well, then wait a second - or a few. I'm working on it."));
         interaction.create_response(&ctx, response).await?;
@@ -209,20 +202,25 @@ fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) 
     components
 }
 
-
+async fn initial_clear_components(ctx: &SContext, interaction: &ComponentInteraction) -> Result<()> {
+    // fetch message
+    let response = CreateInteractionResponse::Acknowledge;
+    interaction.create_response(&ctx, response).await?;
+    let response = EditInteractionResponse::new().attachments(EditAttachments::keep_all(&interaction.message)).content("Enjoy the darkness!");
+    interaction.edit_response(&ctx, response).await?;
+    Ok(())
+}
 
 async fn handle_dispose(ctx: &SContext, interaction: &ComponentInteraction) -> Result<()> {
     let content = &interaction.data.custom_id;
-    let message_id = content.split("-").last().unwrap().parse::<u64>()?;
+    initial_clear_components(&ctx, &interaction).await?;
     // fetch message
-    let response = CreateInteractionResponse::UpdateMessage(CreateInteractionResponseMessage::new()
-        .components(vec![])
-        .add_file(CreateAttachment::url(&ctx, &interaction.message.attachments.first().unwrap().url).await?)
+    interaction.channel_id.delete_message(&ctx, interaction.message.id).await?;
+    let response = CreateInteractionResponse::Message(
+        CreateInteractionResponseMessage::new()
+        .content("I have thrown it deep into the void to never see it again. Enjoy the darkness!")
+        .ephemeral(true)
     );
-    interaction.create_response(&ctx, response).await?;
-    // fetch message
-    interaction.channel_id.delete_message(&ctx, message_id).await?;
-    let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content("I have thrown it deep into the void to never see it again. Enjoy the darkness!"));
     interaction.create_response(&ctx, response).await?;
     Ok(())
 }
