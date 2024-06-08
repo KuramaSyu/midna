@@ -15,6 +15,7 @@ pub struct NordOptions {
     pub invert: bool,
     pub hue_rotate: f32,
     pub sepia: bool,
+    pub nord: bool,
 }
 
 impl NordOptions {
@@ -23,6 +24,7 @@ impl NordOptions {
             invert: false,
             hue_rotate: 0.0,
             sepia: false,
+            nord: false,
         }
     }
     pub fn default() -> Self {
@@ -30,6 +32,7 @@ impl NordOptions {
             invert: true,
             hue_rotate: 180.0,
             sepia: true,
+            nord: true,
         }
     }
 }
