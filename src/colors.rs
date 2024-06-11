@@ -58,7 +58,7 @@ impl NordOptions {
         let invert_by_brightness = image_information.brightness.average > 0.5;
         match image_information.image_type {
             Some(ImageType::Cartoon) => {
-                options.erase_most_present_color = image_information.color_map.most_present_color_percentage > 0.3;
+                options.erase_most_present_color = image_information.color_map.most_present_color_percentage > 0.1;
                 options.invert = invert_by_brightness;
                 options.hue_rotate = 180.;
                 options.sepia = true;
@@ -68,6 +68,16 @@ impl NordOptions {
                 options.start = false;
             },
             Some(ImageType::Picture) => {
+            if image_information.color_map.most_present_color_percentage > 0.1 {
+                options.invert = false;
+                options.hue_rotate = 0.;
+                options.sepia = false;
+                options.nord = false;
+                options.erase_most_present_color = true;
+                options.erase_when_percentage = 0.1;
+                options.auto_adjust = false;
+                options.start = false;
+            } else {
                 options.invert = false;
                 options.hue_rotate = 0.;
                 options.sepia = true;
@@ -76,7 +86,7 @@ impl NordOptions {
                 options.erase_when_percentage = 0.3;
                 options.auto_adjust = false;
                 options.start = false;
-            },
+            }},
             None => {}
         }
         options
@@ -316,12 +326,12 @@ impl Nord {
 pub fn get_recommended_nord_options(mut image: DynamicImage) -> NordOptions {
     NordOptions::default()
 }
-pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImage {
+pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageInformation) -> DynamicImage {
     let mut image = _image.clone();
     println!("{:?}", image.dimensions());
     //image = image.grayscale();
-    let brightness = calculate_average_brightness(&image.to_rgba8());
-    println!("Brightness of image is: {:.3}", brightness);
+    let image_information = calculate_average_brightness(&image.to_rgba8());
+    println!("Brightness of image is: {:.3}", image_information.brightness.average);
 
     
 
@@ -403,10 +413,10 @@ pub fn apply_tone(image: &mut RgbaImage, target_color: Rgb<f32>, blend_factor: f
 
 
 
-pub fn calculate_average_brightness(image: &RgbaImage) -> f32 {
+pub fn calculate_average_brightness(image: &RgbaImage) -> ImageInformation {
     let image_information = get_image_information(&image);
     println!("IMAGE INFORMATION -------------\n{:?}", image_information);
-    image_information.brightness.average
+    image_information
     // let (width, height) = image.dimensions();
     // let sample_distance = (width / 50).max(10) as usize;
     // let resized_image = DynamicImage::ImageRgba8(image.clone());
@@ -604,11 +614,11 @@ fn apply_gaussian_blur_to_alpha(image: &mut RgbaImage, sigma: f32) {
 }
 
 #[derive(Clone, Debug)]
-struct ImageInformation {
-    brightness: Brightness,
-    grayscale_similarity: GrayScaleSimilarity,
-    color_map: ColorMap,
-    image_type: Option<ImageType>,
+pub struct ImageInformation {
+    pub brightness: Brightness,
+    pub grayscale_similarity: GrayScaleSimilarity,
+    pub color_map: ColorMap,
+    pub image_type: Option<ImageType>,
 }
 
 impl ImageInformation {
@@ -622,22 +632,22 @@ impl ImageInformation {
     }
 }
 #[derive(Clone, Debug)]
-struct GrayScaleSimilarity {
-    average: f32,
-    min: f32,
-    max: f32,
+pub struct GrayScaleSimilarity {
+    pub average: f32,
+    pub min: f32,
+    pub max: f32,
 }
 #[derive(Clone, Debug)]
 struct ColorMap {
-    most_present_color: (u8, u8, u8),
-    most_present_color_percentage: f64,
-    amount: u64,
+    pub most_present_color: (u8, u8, u8),
+    pub most_present_color_percentage: f64,
+    pub amount: u64,
 }
 #[derive(Clone, Debug)]
-struct Brightness {
-    average: f32,
-    min: f32,
-    max: f32,
+pub struct Brightness {
+    pub average: f32,
+    pub min: f32,
+    pub max: f32,
 }
 
 fn get_image_information(image: &RgbaImage) -> ImageInformation {
