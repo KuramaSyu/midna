@@ -38,11 +38,21 @@ impl NordOptions {
             hue_rotate: 180.0,
             sepia: true,
             nord: true,
+            erase_most_present_color: false, 
+            erase_when_percentage: 0.3,  // if met: all other filters are ignored
+        }
+    }
+
+    pub fn default_erase() -> Self {
+        NordOptions {
+            invert: false,
+            hue_rotate: 0.0,
+            sepia: false,
+            nord: false,
             erase_most_present_color: true, 
             erase_when_percentage: 0.3,  // if met: all other filters are ignored
         }
     }
-    
 
     pub fn make_nord_custom_id(&self, message_id: &u64, update: bool) -> String {
         format!(
@@ -222,7 +232,7 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
         let (most_present_color, percentage) = get_most_present_colors(&mut mod_image);
         println!("Most present color: {:?} with percentage {:.3}", most_present_color, percentage);
         if percentage >= options.erase_when_percentage {
-            remove_most_present_colors(&mut mod_image, most_present_color, 0.3);
+            remove_most_present_colors(&mut mod_image, most_present_color, 128.);
             return DynamicImage::from(mod_image);
         }
     }
@@ -438,7 +448,7 @@ pub fn remove_most_present_colors(image: &mut RgbaImage, most_present_color: Rgb
     for pixel in image.pixels_mut() {
         let Rgba([r, g, b, a]) = *pixel;
         let rgb = (r, g, b);
-        let mut min_distance = most_present_color.color_distance(rgb);
+        let min_distance = most_present_color.color_distance(rgb);
 
         if min_distance < max_distance {
             let new_alpha = map_distance_to_transparency(min_distance, max_distance);
