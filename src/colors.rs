@@ -225,16 +225,18 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
     let brightness = calculate_average_brightness(&image.to_rgba8());
     println!("Brightness of image is: {:.3}", brightness);
 
-    let mut mod_image = image.to_rgba8();
+    
 
 
     if options.erase_most_present_color {
         // Remove most present color if above threshold
+        let mut mod_image = image.to_rgba8();
         let (most_present_color, percentage) = get_most_present_colors(&mut mod_image);
         println!("Most present color: {:?} with percentage {:.3}", most_present_color, percentage);
         if percentage >= options.erase_when_percentage {
+            // there is actually a color to remove -> remove it
             remove_most_present_colors(&mut mod_image, most_present_color, 40.);
-            return DynamicImage::from(mod_image);
+            image = DynamicImage::from(mod_image);
         }
     }
 
@@ -250,7 +252,7 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
     //image = image.adjust_contrast(-4.5);
     //image = image.blur(0.2);
     //image = image.adjust_contrast(5.);
-    
+    let mut mod_image = image.to_rgba8();
     if options.sepia {
         apply_sepia(&mut mod_image);
     }
@@ -259,7 +261,7 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
 
     if options.nord {
         mod_image = image.to_rgba8();
-        apply_nord_filter(&mut mod_image, 1.);
+        apply_nord_filter(&mut mod_image, &options);
         DynamicImage::from(mod_image)
     } else {
         image
@@ -301,6 +303,8 @@ pub fn apply_tone(image: &mut RgbaImage, target_color: Rgb<f32>, blend_factor: f
     }
 }
 
+
+
 pub fn calculate_average_brightness(image: &RgbaImage) -> f32 {
     let (width, height) = image.dimensions();
     let sample_distance = (width / 50).max(10) as usize;
@@ -319,13 +323,18 @@ pub fn calculate_average_brightness(image: &RgbaImage) -> f32 {
     total_brightness / num_pixels as f32
 }
 
+
+
 pub fn calculate_avg_pixel_brightness(r: u8, g: u8, b: u8) -> f32 {
     (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32) / 255.0
 }
 
-pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
+
+
+pub fn apply_nord_filter(image: &mut RgbaImage, options: &NordOptions) {
     let mut smallest_grey = f32::MAX;
     let mut biggest_grey = f32::MIN;
+    let max_brightness = if options.erase_most_present_color {1.} else {0.85};
 
     let contrast_colors = vec![
         PolarNight::a, PolarNight::b, PolarNight::c, PolarNight::d,
@@ -365,7 +374,7 @@ pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
         }
 
         let color = RgbColor { r: *r, g: *g, b: *b };
-        let br = color.brightness();
+        let current_pixel_br = color.brightness();
         let grayscale_similarity = color.calculate_grayscale_similarity();
 
         if grayscale_similarity < smallest_grey {
@@ -375,7 +384,7 @@ pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
             biggest_grey = grayscale_similarity;
         }
 
-        let darken_by = (br - 0.85).max(0.0);
+        let darken_by = (current_pixel_br - max_brightness).max(0.0);
         let adjusted_color = if darken_by > 0.0 {
             color.darken_rgb(darken_by)
         } else {
@@ -388,7 +397,7 @@ pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
             get_nearest_color(&adjusted_color, &colorful_colors)
         };
 
-        let strength = 1.0 - (br - nearest_color.brightness()).abs() * 0.8;
+        let strength = (1.0 - (current_pixel_br - nearest_color.brightness()).abs()) * 0.8;
 
         let blended_r = (adjusted_color.rn() * (1.0 - strength) + nearest_color.rn() * strength) * 255.0;
         let blended_g = (adjusted_color.gn() * (1.0 - strength) + nearest_color.gn() * strength) * 255.0;
@@ -470,7 +479,7 @@ pub fn remove_most_present_colors(image: &mut RgbaImage, most_present_color: Rgb
         }
     }
     // Apply a Gaussian blur to the alpha channel for smoothing
-    apply_gaussian_blur_to_alpha(image, 3.0);
+    // apply_gaussian_blur_to_alpha(image, 2.0);
 }
 
 fn apply_gaussian_blur_to_alpha(image: &mut RgbaImage, sigma: f32) {
