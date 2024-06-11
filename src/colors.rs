@@ -28,16 +28,9 @@ pub struct NordOptions {
 
 impl NordOptions {
     pub fn new() -> Self {
-        NordOptions {
-            invert: false,
-            hue_rotate: 0.0,
-            sepia: false,
-            nord: false,
-            erase_most_present_color: false,
-            erase_when_percentage: 0.3,
-            auto_adjust: false,
-            start: false,
-        }
+        let mut options = NordOptions::default();
+        options.start = true;
+        options
     }
     pub fn default() -> Self {
         NordOptions {
