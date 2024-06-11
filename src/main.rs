@@ -174,23 +174,38 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
 
 fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) -> Vec<CreateActionRow> {
     let mut components = Vec::new();
-    let mut action_row = Vec::<CreateButton>::new();
+    let mut action_rows = Vec::<Vec<CreateButton>>::new();
     // make option lists, so that the clicked button is inverted
-    let option_list = vec![
-        ("Invert", options.invert, colors::NordOptions {invert: !options.invert, ..options}),
-        ("Hue Rotate", if options.hue_rotate == 180. {true} else {false}, colors::NordOptions {hue_rotate: if options.hue_rotate == 180. {0.} else {180.}, ..options}),
-        ("Sepia", options.sepia, colors::NordOptions {sepia: !options.sepia, ..options}),
-        ("Nord", options.nord, colors::NordOptions {nord: !options.nord, ..options}),
+    let option_2d_list = vec![
+        // component row
+        vec![
+            // component
+            //name: intert, enabled/disabled, When click, then switch enabled/disabled
+            ("Invert", options.invert, colors::NordOptions {invert: !options.invert, ..options}),
+            ("Hue Rotate", if options.hue_rotate == 180. {true} else {false}, colors::NordOptions {hue_rotate: if options.hue_rotate == 180. {0.} else {180.}, ..options}),
+            ("Sepia", options.sepia, colors::NordOptions {sepia: !options.sepia, ..options}),
+            ("Nord", options.nord, colors::NordOptions {nord: !options.nord, ..options}),
+        ],
+        vec![
+            ("Erase Background", options.erase_most_present_color, if options.erase_most_present_color {NordOptions::default()} else {NordOptions::default_erase()})
+        ]
+
     ];
-    for (label, enabled, option) in option_list {
-        action_row.push(
-            CreateButton::new(options.make_nord_custom_id(&message_id, update))
-                .style(ButtonStyle::Secondary)
-                .label(&format!("{}", label))
-                .style(if enabled {ButtonStyle::Primary} else {ButtonStyle::Secondary})
-        );
+    for option_list in option_2d_list {
+        let mut action_row = Vec::<CreateButton>::new();
+        for (label, enabled, option) in option_list {
+            action_row.push(
+                CreateButton::new(option.make_nord_custom_id(&message_id, update))
+                    .style(ButtonStyle::Secondary)
+                    .label(&format!("{}", label))
+                    .style(if enabled {ButtonStyle::Primary} else {ButtonStyle::Secondary})
+            );
+        }
+        action_rows.push(action_row);
     }
-    components.push(CreateActionRow::Buttons(action_row));
+    for action_row in action_rows {
+        components.push(CreateActionRow::Buttons(action_row));
+    }
     components.push(
         CreateActionRow::Buttons(
             vec![
