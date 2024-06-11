@@ -11,7 +11,12 @@ use image::io::Reader as ImageReader;
 
 pub fn get_image() -> ImageResult<DynamicImage> {
     
-    ImageReader::open("test.png")?.decode()
+    let image = ImageReader::open("test.png")?.decode();
+    if let Ok(ref image) = image {
+        let image_information = get_image_information(&image.to_rgba8());
+        println!("{:?}", image_information);
+    }
+    image
 }
 // implement clone
 #[derive(Clone, Debug)]
@@ -276,7 +281,9 @@ impl Nord {
 }
 
 
-
+pub fn get_recommended_nord_options(mut image: DynamicImage) -> NordOptions {
+    NordOptions::default()
+}
 pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImage {
     let mut image = _image.clone();
     println!("{:?}", image.dimensions());
@@ -499,6 +506,7 @@ pub fn get_most_present_colors(image: &mut RgbaImage) -> (RgbColor, f64) {
         }
         total_count += *count as f64;
     }
+    println!("amount of clolors: {}", color_map.len());
     (RgbColor { r: most_present_color.0, g: most_present_color.1, b: most_present_color.2 }, max_count / total_count)
 
 }
@@ -558,4 +566,107 @@ fn apply_gaussian_blur_to_alpha(image: &mut RgbaImage, sigma: f32) {
         let pixel = image.get_pixel_mut(x, y);
         pixel[3] = blurred_pixel[3];
     }
+}
+
+#[derive(Clone, Debug)]
+struct ImageInformation {
+    brightness: Brightness,
+    grayscale_similarity: GrayScaleSimilarity,
+    color_map: ColorMap,
+}
+
+impl ImageInformation {
+    pub fn new() -> Self {
+        ImageInformation {
+            brightness: Brightness { average: 0.0, min: 0.0, max: 0.0 },
+            grayscale_similarity: GrayScaleSimilarity { average: 0.0, min: 0.0, max: 0.0 },
+            color_map: ColorMap { most_present_color: (0, 0, 0), most_present_color_percentage: 0.0, amount: 0 },
+        }
+    }
+}
+#[derive(Clone, Debug)]
+struct GrayScaleSimilarity {
+    average: f32,
+    min: f32,
+    max: f32,
+}
+#[derive(Clone, Debug)]
+struct ColorMap {
+    most_present_color: (u8, u8, u8),
+    most_present_color_percentage: f64,
+    amount: u64,
+}
+#[derive(Clone, Debug)]
+struct Brightness {
+    average: f32,
+    min: f32,
+    max: f32,
+}
+
+fn get_image_information(image: &RgbaImage) -> ImageInformation {
+    let mut total_brightness = 0.0;
+    let mut total_grayscale = 0.0;
+    let mut color_map: HashMap<(u8, u8, u8), u64> = HashMap::new();
+    let mut image_information = ImageInformation::new();
+    let mut min_brightness = f32::MAX;
+    let mut max_brightness = f32::MIN;
+    let mut min_grayscale = f32::MAX;
+    let mut max_grayscale = f32::MIN;
+    
+    let num_pixels = image.width() * image.height();
+    const SAMPLE_DISTANCE: usize = 50;
+    let pixel_amount = num_pixels / SAMPLE_DISTANCE.max(1) as u32;
+
+    for (i, Rgba([r, g, b, a])) in image.pixels().enumerate() {
+        if i % SAMPLE_DISTANCE != 0 || *a <= 128 {
+            continue;
+        }
+        let pixel = RgbColor { r: *r, g: *g, b: *b };
+        let brightness = pixel.brightness();
+        let grayscale_similarity = pixel.calculate_grayscale_similarity();
+
+        total_brightness += brightness;
+        total_grayscale += grayscale_similarity;
+
+        if brightness < min_brightness {
+            min_brightness = brightness;
+        }
+        if brightness > max_brightness {
+            max_brightness = brightness;
+        }
+        if grayscale_similarity < min_grayscale {
+            min_grayscale = grayscale_similarity;
+        }
+        if grayscale_similarity > max_grayscale {
+            max_grayscale = grayscale_similarity;
+        }
+
+        *color_map.entry((pixel.r, pixel.g, pixel.b)).or_insert(0) += 1;
+    }
+
+    let average_brightness = total_brightness / pixel_amount as f32;
+    let average_grayscale_similarity = total_grayscale / pixel_amount as f32;
+
+    let (most_present_color, &most_present_color_count) = color_map.iter().max_by_key(|&(_, count)| count).unwrap_or((&(0, 0, 0), &0));
+    let most_present_color_percentage = most_present_color_count as f64 / pixel_amount as f64 * 100.0;
+
+    image_information.brightness = Brightness {
+        average: average_brightness,
+        min: min_brightness,
+        max: max_brightness,
+    };
+
+    image_information.grayscale_similarity = GrayScaleSimilarity {
+        average: average_grayscale_similarity,
+        min: min_grayscale,
+        max: max_grayscale,
+    };
+
+    image_information.color_map = ColorMap {
+        most_present_color: *most_present_color,
+        most_present_color_percentage,
+        amount: most_present_color_count,
+    };
+
+    image_information
 }
