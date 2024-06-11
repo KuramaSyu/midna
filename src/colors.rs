@@ -106,6 +106,14 @@ impl RgbColor {
             b: (new_b * 255.0) as u8,
         }
     }
+    fn color_distance(&self, c2: (u8, u8, u8)) -> f32 {
+        let (r1, g1, b1) = (self.r, self.g, self.b);
+        let (r2, g2, b2) = c2;
+        let dr = r1 as f32 - r2 as f32;
+        let dg = g1 as f32 - g2 as f32;
+        let db = b1 as f32 - b2 as f32;
+        (dr * dr + dg * dg + db * db).sqrt()
+    }
     
 }
 
@@ -363,5 +371,36 @@ pub fn get_most_present_colors(image: &mut RgbaImage, blend_factor: f32) -> Hash
         color_map.entry(key).and_modify(|e| *e += 1).or_insert(1);
     }
     return color_map;
+}
+
+
+fn map_distance_to_transparency(distance: f32, max_distance: f32) -> u8 {
+    if distance >= max_distance {
+        0
+    } else {
+        let alpha = 1.0 - (distance / max_distance);
+        (alpha * 255.0) as u8
+    }
+}
+
+pub fn remove_most_present_colors(image: &mut RgbaImage, most_present_colors: HashMap<(u8, u8, u8), u64>, max_distance: f32) {
+    for pixel in image.pixels_mut() {
+        let Rgba([r, g, b, a]) = *pixel;
+        let rgb = (r, g, b);
+        let mut min_distance = f32::MAX;
+
+        for &color in most_present_colors.keys() {
+            let c = RgbColor { r: color.0, g: color.1, b: color.2 };
+            let distance = c.color_distance(color);
+            if distance < min_distance {
+                min_distance = distance;
+            }
+        }
+
+        if min_distance < max_distance {
+            let new_alpha = map_distance_to_transparency(min_distance, max_distance);
+            *pixel = Rgba([r, g, b, new_alpha]);
+        }
+    }
 }
 
