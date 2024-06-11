@@ -9,6 +9,12 @@ use env_logger::{Builder, Env};
 use log::{info, warn, debug, Level::Debug, set_max_level};
 use image::io::Reader as ImageReader;
 
+
+#[derive(Clone, Debug)]
+pub enum ImageType {
+    Cartoon,
+    Picture
+}
 pub fn get_image() -> ImageResult<DynamicImage> {
     
     let image = ImageReader::open("test.png")?.decode();
@@ -45,6 +51,35 @@ impl NordOptions {
             auto_adjust: true,
             start: false,
         }
+    }
+
+    pub fn from_image_information(image_information: &ImageInformation) -> Self {
+        let mut options = NordOptions::default();
+        let invert_by_brightness = image_information.brightness.average > 0.5;
+        match image_information.image_type {
+            Some(ImageType::Cartoon) => {
+                options.erase_most_present_color = image_information.color_map.most_present_color_percentage > 0.3;
+                options.invert = invert_by_brightness;
+                options.hue_rotate = 180.;
+                options.sepia = true;
+                options.nord = true;
+                options.erase_when_percentage = 0.1;
+                options.auto_adjust = false;
+                options.start = false;
+            },
+            Some(ImageType::Picture) => {
+                options.invert = false;
+                options.hue_rotate = 0.;
+                options.sepia = true;
+                options.nord = true;
+                options.erase_most_present_color = false;
+                options.erase_when_percentage = 0.3;
+                options.auto_adjust = false;
+                options.start = false;
+            },
+            None => {}
+        }
+        options
     }
 
     pub fn default_erase() -> Self {
@@ -573,6 +608,7 @@ struct ImageInformation {
     brightness: Brightness,
     grayscale_similarity: GrayScaleSimilarity,
     color_map: ColorMap,
+    image_type: Option<ImageType>,
 }
 
 impl ImageInformation {
@@ -581,6 +617,7 @@ impl ImageInformation {
             brightness: Brightness { average: 0.0, min: 0.0, max: 0.0 },
             grayscale_similarity: GrayScaleSimilarity { average: 0.0, min: 0.0, max: 0.0 },
             color_map: ColorMap { most_present_color: (0, 0, 0), most_present_color_percentage: 0.0, amount: 0 },
+            image_type: None,
         }
     }
 }
@@ -668,6 +705,14 @@ fn get_image_information(image: &RgbaImage) -> ImageInformation {
         most_present_color_percentage,
         amount: color_amount,
     };
-
+    // predict image type
+    if 
+        image_information.grayscale_similarity.average < 0.001 
+        && image_information.color_map.most_present_color_percentage > 0.1
+    {
+        image_information.image_type = Some(ImageType::Cartoon);
+    } else {
+        image_information.image_type = Some(ImageType::Picture);
+    }
     image_information
 }
