@@ -105,33 +105,77 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     let options = NordOptions::from_custom_id(&content);
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
     let update = content.split("-").nth(1).unwrap().parse::<bool>().unwrap_or(true);
-    let new_components = build_componets(message_id, options.clone(), true);
-    // fetch message
-    if let Err(err) = interaction.channel_id.message(&ctx, message_id).await {
-        let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new()
-            .content("Seems like the bright picture has vanished. I can't darken what I can't see.")
-        );
-        interaction.create_response(&ctx, response).await?;
-    }
-    let message = interaction.channel_id.message(&ctx, message_id).await?;
-    if update {
-        let response = CreateInteractionResponse::Acknowledge;
-        interaction.create_response(&ctx, response).await?;
-        let response = EditInteractionResponse::new()
-            .attachments(EditAttachments::keep_all(&interaction.message))
-            .content("⌛ I'm working on it. Please wait a moment.")
-            .components(new_components.clone());
-        interaction.edit_response(&ctx, response).await.unwrap();
+    let new_components = options.build_componets(message_id, true);
+    let mut message: Option<Message> = None;
+    if options.start {
+        // start button pressed
+        if let Err(err) = interaction.channel_id.message(&ctx, message_id).await {
+            // fetch image message -> error
+            let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new()
+                .content("Seems like the bright picture has vanished. I can't darken what I can't see.")
+            );
+            interaction.create_response(&ctx, response).await?;
+        }
+        let message = interaction.channel_id.message(&ctx, message_id).await?;
+        if update {
+            // first ack, that existing image is being kept
+            let response = CreateInteractionResponse::Acknowledge;
+            interaction.create_response(&ctx, response).await?;
+            // edit response with new components
+            let response = EditInteractionResponse::new()
+                .attachments(EditAttachments::keep_all(&interaction.message))
+                .content("⌛ I'm working on it. Please wait a moment.")
+                .components(new_components.clone());
+            interaction.edit_response(&ctx, response).await.unwrap();
+        } else {
+            // create response with new components
+            let response = CreateInteractionResponse::UpdateMessage(
+                CreateInteractionResponseMessage::new()
+                .content("⌛ I'm working on it. Please wait a moment.")
+                .components(new_components.clone())
+            );
+            interaction.create_response(&ctx, response).await.unwrap();
+        }
     } else {
-        //ack
-        let response = CreateInteractionResponse::UpdateMessage(
-            CreateInteractionResponseMessage::new()
-            .content("⌛ I'm working on it. Please wait a moment.")
-            .components(new_components.clone())
-        );
-        interaction.create_response(&ctx, response).await.unwrap();
+        // start not pressed
+        if update {
+            // first ack, that existing image is being kept
+            let response = CreateInteractionResponse::Acknowledge;
+            interaction.create_response(&ctx, response).await?;
+            // edit response with new components
+            let response = EditInteractionResponse::new()
+                .attachments(EditAttachments::keep_all(&interaction.message))
+                .content("⌛ I change the options. Please wait a moment.")
+                .components(new_components.clone());
+            interaction.edit_response(&ctx, response).await.unwrap();
+        } else {
+            // create response with new components
+            let response = CreateInteractionResponse::UpdateMessage(
+                CreateInteractionResponseMessage::new()
+                .content("⌛ I change the options. Please wait a moment.")
+                .components(new_components.clone())
+            );
+            interaction.create_response(&ctx, response).await.unwrap();
+        }
     }
-    // sanduhr: 🕰️
+    
+    if !options.start {
+        let response = EditInteractionResponse::new()
+            .content("Edited your options.")
+            .components(new_components.clone())
+        ;
+        interaction.edit_response(&ctx, response).await?;
+        return Ok(())
+    }
+    // ensure existence of message
+    if message.is_none() {
+        interaction.create_followup(&ctx, CreateInteractionResponseFollowup::new()
+            .content("Seems like the bright picture has vanished. I can't darken what I can't see.")
+            .ephemeral(true)
+        ).await?;
+    }
+    let message = message.unwrap();
+    // process image
     for attachment in &message.attachments {
         println!("Processing attachment");
         let image = process_image(&attachment, &message, ctx, data, options.clone()).await.unwrap();
@@ -157,74 +201,6 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     Ok(())
 }
 
-
-// fn make_nord_custom_id(message_id: u64, update: bool, options: &colors::NordOptions) -> String {
-//     format!("darken-{}-{}-{}-{}-{}-{}", update, options.invert, options.hue_rotate, options.sepia, options.nord, message_id)
-// }
-
-// fn parse_nord_custom_id(custom_id: &str) -> colors::NordOptions {
-//     let mut parts = custom_id.split("-").skip(1);
-//     let _update = parts.next().unwrap().parse::<bool>().unwrap();
-//     let invert = parts.next().unwrap().parse::<bool>().unwrap();
-//     let hue_rotate = parts.next().unwrap().parse::<f32>().unwrap();
-//     let sepia = parts.next().unwrap().parse::<bool>().unwrap();
-//     let nord = parts.next().unwrap().parse::<bool>().unwrap();
-//     colors::NordOptions {invert, hue_rotate, sepia, nord}
-// }
-
-fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) -> Vec<CreateActionRow> {
-    let mut components = Vec::new();
-    let mut action_rows = Vec::<Vec<CreateButton>>::new();
-    // make option lists, so that the clicked button is inverted
-    let option_2d_list = vec![
-        // component row
-        vec![
-            // component
-            //name: intert, enabled/disabled, When click, then switch enabled/disabled
-            ("Invert", options.invert, colors::NordOptions {invert: !options.invert, ..options}),
-            ("Hue Rotate", if options.hue_rotate == 180. {true} else {false}, colors::NordOptions {hue_rotate: if options.hue_rotate == 180. {0.} else {180.}, ..options}),
-            ("Sepia", options.sepia, colors::NordOptions {sepia: !options.sepia, ..options}),
-            ("Nord", options.nord, colors::NordOptions {nord: !options.nord, ..options}),
-        ],
-        vec![
-            ("Erase Background", options.erase_most_present_color, if options.erase_most_present_color {NordOptions::default()} else {NordOptions::default_erase()})
-        ]
-
-    ];
-    for option_list in option_2d_list {
-        let mut action_row = Vec::<CreateButton>::new();
-        for (label, enabled, option) in option_list {
-            action_row.push(
-                CreateButton::new(option.make_nord_custom_id(&message_id, update))
-                    .style(ButtonStyle::Secondary)
-                    .label(&format!("{}", label))
-                    .style(if enabled {ButtonStyle::Primary} else {ButtonStyle::Secondary})
-            );
-        }
-        action_rows.push(action_row);
-    }
-    for action_row in action_rows {
-        components.push(CreateActionRow::Buttons(action_row));
-    }
-    components.push(
-        CreateActionRow::Buttons(
-            vec![
-                CreateButton::new(format!("delete-{}", message_id))
-                    .style(ButtonStyle::Secondary)
-                    .label("Dispose of the old!")
-                    .emoji("🗑️".parse::<ReactionType>().unwrap()),
-                // stop button
-                CreateButton::new(format!("stop-{}", message_id))
-                    .style(ButtonStyle::Secondary)
-                    .label("Dispose of this"),
-                CreateButton::new(format!("clear-{}", message_id))
-                    .style(ButtonStyle::Secondary)
-                    .label("Keep both")
-            ]
-        )
-    );
-    components
-}
 
 async fn initial_clear_components(ctx: &SContext, interaction: &ComponentInteraction) -> Result<()> {
     // fetch message
