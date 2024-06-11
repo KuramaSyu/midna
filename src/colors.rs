@@ -1,4 +1,5 @@
-use image::{DynamicImage, GenericImageView, ImageResult, ImageBuffer, RgbaImage, Rgb, Rgba};
+use image::{DynamicImage, GenericImageView, ImageResult, ImageBuffer, RgbaImage, Rgb, Rgba, Pixel};
+use imageproc::filter::gaussian_blur_f32;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::{borrow::BorrowMut, io::Cursor};
@@ -77,7 +78,7 @@ impl NordOptions {
 }
 
 #[derive(Clone, Debug)]
-struct RgbColor {
+pub struct RgbColor {
     r: u8,
     g: u8,
     b: u8,
@@ -232,12 +233,12 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
         let (most_present_color, percentage) = get_most_present_colors(&mut mod_image);
         println!("Most present color: {:?} with percentage {:.3}", most_present_color, percentage);
         if percentage >= options.erase_when_percentage {
-            remove_most_present_colors(&mut mod_image, most_present_color, 128.);
+            remove_most_present_colors(&mut mod_image, most_present_color, 40.);
             return DynamicImage::from(mod_image);
         }
     }
 
-    if  brightness > 0.65 && options.invert {
+    if options.invert {
         image.invert();
     }
 
@@ -434,12 +435,25 @@ pub fn get_most_present_colors(image: &mut RgbaImage) -> (RgbColor, f64) {
 
 }
 
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+// fn map_distance_to_transparency(distance: f32, max_distance: f32) -> u8 {
+//     if distance >= max_distance {
+//         0
+//     } else {
+//         let alpha = distance / max_distance;
+//         (alpha * 255.0) as u8
+//     }
+// }
 
 fn map_distance_to_transparency(distance: f32, max_distance: f32) -> u8 {
     if distance >= max_distance {
         0
     } else {
-        let alpha = 1.0 - (distance / max_distance);
+        let alpha = smoothstep(0.0, max_distance, distance);
         (alpha * 255.0) as u8
     }
 }
@@ -448,12 +462,32 @@ pub fn remove_most_present_colors(image: &mut RgbaImage, most_present_color: Rgb
     for pixel in image.pixels_mut() {
         let Rgba([r, g, b, a]) = *pixel;
         let rgb = (r, g, b);
-        let min_distance = most_present_color.color_distance(rgb);
+        let distance = most_present_color.color_distance(rgb);
 
-        if min_distance < max_distance {
-            let new_alpha = map_distance_to_transparency(min_distance, max_distance);
+        if distance < max_distance {
+            let new_alpha = map_distance_to_transparency(distance, max_distance);
             *pixel = Rgba([r, g, b, new_alpha]);
         }
     }
+    // Apply a Gaussian blur to the alpha channel for smoothing
+    apply_gaussian_blur_to_alpha(image, 3.0);
 }
 
+fn apply_gaussian_blur_to_alpha(image: &mut RgbaImage, sigma: f32) {
+    let (width, height) = image.dimensions();
+    let mut alpha_image = RgbaImage::new(width, height);
+
+    // Extract the alpha channel
+    for (x, y, pixel) in image.enumerate_pixels() {
+        alpha_image.put_pixel(x, y, Rgba([0, 0, 0, pixel[3]]));
+    }
+
+    // Apply Gaussian blur to the alpha channel
+    let blurred_alpha_image = gaussian_blur_f32(&alpha_image, sigma);
+
+    // Update the image with the blurred alpha channel
+    for (x, y, blurred_pixel) in blurred_alpha_image.enumerate_pixels() {
+        let pixel = image.get_pixel_mut(x, y);
+        pixel[3] = blurred_pixel[3];
+    }
+}
