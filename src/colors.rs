@@ -104,7 +104,7 @@ impl NordOptions {
                 ("Nord", self.nord, NordOptions {nord: !self.nord, ..self_no_start}),
             ],
             vec![
-                ("Erase Background", self.erase_most_present_color, if self.erase_most_present_color {NordOptions::default()} else {NordOptions::default_erase()})
+                ("Erase Background", self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start} )
             ],
             vec![
                 ("Start", self.start, NordOptions {start: !self.start, ..self_no_start}),
