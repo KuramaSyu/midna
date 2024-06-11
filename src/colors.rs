@@ -188,7 +188,11 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
     println!("{:?}", image.dimensions());
     //image = image.grayscale();
     let brightness = calculate_average_brightness(&image.to_rgba8());
-    info!("Brightness of image is: {:.3}", brightness);
+    println!("Brightness of image is: {:.3}", brightness);
+
+    let mut mod_image = image.to_rgba8();
+    let (most_present_color, distance) = get_most_present_colors(&mut mod_image);
+    println!("Most present color: {:?} with distance {:.3}", most_present_color, distance);
     if  brightness > 0.65 && options.invert {
         image.invert();
     }
@@ -201,7 +205,7 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
     //image = image.adjust_contrast(-4.5);
     //image = image.blur(0.2);
     //image = image.adjust_contrast(5.);
-    let mut mod_image = image.to_rgba8();
+    
     if options.sepia {
         apply_sepia(&mut mod_image);
     }
@@ -358,7 +362,7 @@ pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
     println!("greyscale: {:.3} - {:.3}", smallest_grey, biggest_grey);
 }
 
-pub fn get_most_present_colors(image: &mut RgbaImage, blend_factor: f32) -> HashMap<(u8, u8, u8), u64> {
+pub fn get_most_present_colors(image: &mut RgbaImage) -> (RgbColor, f64) {
     let mut color_map: HashMap<(u8, u8, u8), u64> = HashMap::new();
     static SAMPLES_PER_LINE: usize = 50;
 
@@ -370,7 +374,19 @@ pub fn get_most_present_colors(image: &mut RgbaImage, blend_factor: f32) -> Hash
         let key = (*r, *g, *b);
         color_map.entry(key).and_modify(|e| *e += 1).or_insert(1);
     }
-    return color_map;
+    
+    let mut most_present_color = (0, 0, 0);
+    let mut total_count = 0.;
+    let mut max_count = 0.;
+    for (color, count) in color_map.iter() {
+        if *count as f64 > max_count {
+            max_count = *count as f64;
+            most_present_color = *color;
+        }
+        total_count += *count as f64;
+    }
+    (RgbColor { r: most_present_color.0, g: most_present_color.1, b: most_present_color.2 }, max_count / total_count)
+
 }
 
 
@@ -383,19 +399,11 @@ fn map_distance_to_transparency(distance: f32, max_distance: f32) -> u8 {
     }
 }
 
-pub fn remove_most_present_colors(image: &mut RgbaImage, most_present_colors: HashMap<(u8, u8, u8), u64>, max_distance: f32) {
+pub fn remove_most_present_colors(image: &mut RgbaImage, most_present_color: RgbColor, max_distance: f32) {
     for pixel in image.pixels_mut() {
         let Rgba([r, g, b, a]) = *pixel;
         let rgb = (r, g, b);
-        let mut min_distance = f32::MAX;
-
-        for &color in most_present_colors.keys() {
-            let c = RgbColor { r: color.0, g: color.1, b: color.2 };
-            let distance = c.color_distance(color);
-            if distance < min_distance {
-                min_distance = distance;
-            }
-        }
+        let mut min_distance = most_present_color.color_distance(rgb);
 
         if min_distance < max_distance {
             let new_alpha = map_distance_to_transparency(min_distance, max_distance);
