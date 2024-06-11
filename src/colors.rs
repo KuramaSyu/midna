@@ -18,7 +18,7 @@ pub struct NordOptions {
     pub sepia: bool,
     pub nord: bool,
     pub erase_most_present_color: bool,
-    pub erase_when_percentage: f32,
+    pub erase_when_percentage: f64,
 }
 
 impl NordOptions {
@@ -44,6 +44,7 @@ impl NordOptions {
     }
 }
 
+#[derive(Clone, Debug)]
 struct RgbColor {
     r: u8,
     g: u8,
@@ -183,6 +184,7 @@ impl Nord {
 }
 
 
+
 pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImage {
     let mut image = _image.clone();
     println!("{:?}", image.dimensions());
@@ -191,8 +193,18 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
     println!("Brightness of image is: {:.3}", brightness);
 
     let mut mod_image = image.to_rgba8();
-    let (most_present_color, distance) = get_most_present_colors(&mut mod_image);
-    println!("Most present color: {:?} with distance {:.3}", most_present_color, distance);
+
+
+    if options.erase_most_present_color {
+        // Remove most present color if above threshold
+        let (most_present_color, percentage) = get_most_present_colors(&mut mod_image);
+        println!("Most present color: {:?} with percentage {:.3}", most_present_color, percentage);
+        if percentage >= options.erase_when_percentage {
+            remove_most_present_colors(&mut mod_image, most_present_color, 0.3);
+            return DynamicImage::from(mod_image);
+        }
+    }
+
     if  brightness > 0.65 && options.invert {
         image.invert();
     }
@@ -220,6 +232,7 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions) -> DynamicImag
         image
     }
 }
+
 
 
 pub fn tint_image(image: &mut RgbaImage, tint: Rgb<f32>) {
