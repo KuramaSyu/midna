@@ -1,7 +1,9 @@
 use image::{DynamicImage, GenericImageView, ImageResult, ImageBuffer, RgbaImage, Rgb, Rgba, Pixel};
 use imageproc::filter::gaussian_blur_f32;
+use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::vec;
 use std::{borrow::BorrowMut, io::Cursor};
 use env_logger::{Builder, Env};
 use log::{info, warn, debug, Level::Debug, set_max_level};
@@ -20,6 +22,8 @@ pub struct NordOptions {
     pub nord: bool,
     pub erase_most_present_color: bool,
     pub erase_when_percentage: f64,
+    pub auto_adjust: bool,
+    pub start: bool,
 }
 
 impl NordOptions {
@@ -31,6 +35,8 @@ impl NordOptions {
             nord: false,
             erase_most_present_color: false,
             erase_when_percentage: 0.3,
+            auto_adjust: false,
+            start: false,
         }
     }
     pub fn default() -> Self {
@@ -41,6 +47,8 @@ impl NordOptions {
             nord: true,
             erase_most_present_color: false, 
             erase_when_percentage: 0.3,  // if met: all other filters are ignored
+            auto_adjust: true,
+            start: false,
         }
     }
 
@@ -52,15 +60,18 @@ impl NordOptions {
             nord: false,
             erase_most_present_color: true, 
             erase_when_percentage: 0.3,  // if met: all other filters are ignored
+            auto_adjust: false,
+            start: false,
         }
     }
 
     pub fn make_nord_custom_id(&self, message_id: &u64, update: bool) -> String {
         format!(
-            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}", 
+            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}", 
             update, self.invert, self.hue_rotate, 
             self.sepia, self.nord, self.erase_most_present_color, 
-            self.erase_when_percentage, message_id
+            self.erase_when_percentage, self.auto_adjust, 
+            self.start, message_id
         )
     }
     
@@ -73,7 +84,76 @@ impl NordOptions {
         let nord = parts.next().unwrap().parse::<bool>().unwrap();
         let erase_most_present_color = parts.next().unwrap().parse::<bool>().unwrap();
         let erase_when_percentage = parts.next().unwrap().parse::<f64>().unwrap();
-        NordOptions {invert, hue_rotate, sepia, nord, erase_most_present_color, erase_when_percentage}
+        let auto_adjust = parts.next().unwrap().parse::<bool>().unwrap();
+        let start = parts.next().unwrap().parse::<bool>().unwrap();
+        NordOptions {
+            invert, hue_rotate, sepia, 
+            nord, erase_most_present_color, 
+            erase_when_percentage, auto_adjust, 
+            start
+        }
+    }
+    pub fn build_componets(&self, message_id: u64, update: bool) -> Vec<CreateActionRow> {
+        let mut components = Vec::new();
+        let mut action_rows = Vec::<Vec<CreateButton>>::new();
+        let mut self_no_start = self.clone();
+        self_no_start.start = false;
+
+        // make option lists, so that the clicked button is inverted
+        let option_2d_list = vec![
+            // component row
+            vec![
+                // component
+                //name: intert, enabled/disabled, When click, then switch enabled/disabled
+                ("Invert", self.invert, NordOptions {invert: !self.invert, ..self_no_start}),
+                ("Hue Rotate", if self.hue_rotate == 180. {true} else {false}, NordOptions {hue_rotate: if self.hue_rotate == 180. {0.} else {180.}, ..self_no_start}),
+                ("Sepia", self.sepia, NordOptions {sepia: !self.sepia, ..self_no_start}),
+                ("Nord", self.nord, NordOptions {nord: !self.nord, ..self_no_start}),
+            ],
+            vec![
+                ("Erase Background", self.erase_most_present_color, if self.erase_most_present_color {NordOptions::default()} else {NordOptions::default_erase()})
+            ],
+            vec![
+                ("Start", self.start, NordOptions {start: !self.start, ..self_no_start}),
+            ]
+    
+        ];
+
+        let mut name_to_color_map = HashMap::<&str, ButtonStyle>::new();
+        name_to_color_map.insert("Start", ButtonStyle::Success);
+        for option_list in option_2d_list {
+            let mut action_row = Vec::<CreateButton>::new();
+            for (label, enabled, option) in option_list {
+                action_row.push(
+                    CreateButton::new(option.make_nord_custom_id(&message_id, update))
+                        .style(ButtonStyle::Secondary)
+                        .label(&format!("{}", label))
+                        .style(if enabled {ButtonStyle::Primary} else {ButtonStyle::Secondary})
+                );
+            }
+            action_rows.push(action_row);
+        }
+        for action_row in action_rows {
+            components.push(CreateActionRow::Buttons(action_row));
+        }
+        components.push(
+            CreateActionRow::Buttons(
+                vec![
+                    CreateButton::new(format!("delete-{}", message_id))
+                        .style(ButtonStyle::Secondary)
+                        .label("Dispose of the old!")
+                        .emoji("🗑️".parse::<ReactionType>().unwrap()),
+                    // stop button
+                    CreateButton::new(format!("stop-{}", message_id))
+                        .style(ButtonStyle::Secondary)
+                        .label("Dispose of this"),
+                    CreateButton::new(format!("clear-{}", message_id))
+                        .style(ButtonStyle::Secondary)
+                        .label("Keep both")
+                ]
+            )
+        );
+        components
     }
 }
 
