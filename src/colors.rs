@@ -12,10 +12,7 @@ use image::io::Reader as ImageReader;
 pub fn get_image() -> ImageResult<DynamicImage> {
     
     let image = ImageReader::open("test.png")?.decode();
-    if let Ok(ref image) = image {
-        let image_information = get_image_information(&image.to_rgba8());
-        println!("{:?}", image_information);
-    }
+
     image
 }
 // implement clone
@@ -372,21 +369,24 @@ pub fn apply_tone(image: &mut RgbaImage, target_color: Rgb<f32>, blend_factor: f
 
 
 pub fn calculate_average_brightness(image: &RgbaImage) -> f32 {
-    let (width, height) = image.dimensions();
-    let sample_distance = (width / 50).max(10) as usize;
-    let resized_image = DynamicImage::ImageRgba8(image.clone());
-    // Proceed with brightness calculation
-    let mut total_brightness = 0.0;
-    let num_pixels = resized_image.width() * resized_image.height() / sample_distance.max(1 as usize) as u32;
+    let image_information = get_image_information(&image);
+    println!("IMAGE INFORMATION -------------\n{:?}", image_information);
+    image_information.brightness.average
+    // let (width, height) = image.dimensions();
+    // let sample_distance = (width / 50).max(10) as usize;
+    // let resized_image = DynamicImage::ImageRgba8(image.clone());
+    // // Proceed with brightness calculation
+    // let mut total_brightness = 0.0;
+    // let num_pixels = resized_image.width() * resized_image.height() / sample_distance.max(1 as usize) as u32;
 
-    for (i, Rgba([r, g, b, _])) in resized_image.to_rgba8().pixels().enumerate() {
-        if i % sample_distance != 0 {
-            continue;
-        }
-        let brightness = calculate_avg_pixel_brightness(*r, *g, *b);
-        total_brightness += brightness;
-    }
-    total_brightness / num_pixels as f32
+    // for (i, Rgba([r, g, b, _])) in resized_image.to_rgba8().pixels().enumerate() {
+    //     if i % sample_distance != 0 {
+    //         continue;
+    //     }
+    //     let brightness = calculate_avg_pixel_brightness(*r, *g, *b);
+    //     total_brightness += brightness;
+    // }
+    // total_brightness / num_pixels as f32
 }
 
 
@@ -648,7 +648,8 @@ fn get_image_information(image: &RgbaImage) -> ImageInformation {
     let average_grayscale_similarity = total_grayscale / pixel_amount as f32;
 
     let (most_present_color, &most_present_color_count) = color_map.iter().max_by_key(|&(_, count)| count).unwrap_or((&(0, 0, 0), &0));
-    let most_present_color_percentage = most_present_color_count as f64 / pixel_amount as f64 * 100.0;
+    let most_present_color_percentage = most_present_color_count as f64 / pixel_amount as f64;
+    let color_amount = color_map.len() as u64;
 
     image_information.brightness = Brightness {
         average: average_brightness,
@@ -665,7 +666,7 @@ fn get_image_information(image: &RgbaImage) -> ImageInformation {
     image_information.color_map = ColorMap {
         most_present_color: *most_present_color,
         most_present_color_percentage,
-        amount: most_present_color_count,
+        amount: color_amount,
     };
 
     image_information
