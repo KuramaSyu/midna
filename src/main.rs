@@ -1,6 +1,6 @@
 #![warn(clippy::str_to_string)]
 mod commands;
-use colors::NordOptions;
+use colors::{ImageInformation, NordOptions};
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
 use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType};
@@ -28,7 +28,7 @@ mod colors;
 
 
 struct ImageCache {
-    cache: Arc<Mutex<TtlCache<String, DynamicImage>>>,
+    cache: Arc<Mutex<TtlCache<String, (DynamicImage, ImageInformation)>>>,
 }
 
 
@@ -39,18 +39,18 @@ impl ImageCache {
         }
     }
 
-    async fn get(&self, url: &str) -> Option<DynamicImage> {
+    async fn get(&self, url: &str) -> Option<(DynamicImage, ImageInformation)> {
         println!("Checking cache for image");
         let cache = self.cache.lock().expect("cant access cache");
         println!("Cache: {}", cache.clone().iter().count());
         cache.get(&url.to_string()).cloned()
     }
 
-    async fn insert(&self, url: String, image: DynamicImage) -> Option<()> {
+    async fn insert(&self, url: String, information: (DynamicImage, ImageInformation)) -> Option<()> {
         println!("Inserting image into cache");
         let mut cache = self.cache.lock().unwrap();
         println!("Cache insert before: {}", cache.clone().iter().count());
-        cache.insert(url.clone(), image, Duration::from_secs(3600));
+        cache.insert(url.clone(), information, Duration::from_secs(3600));
         println!("Cache insert after: {}", cache.clone().iter().count());
         
         Some(())
@@ -100,23 +100,47 @@ async fn interaction_create(ctx: SContext, interaction: Interaction, data: &Data
     Some(())
 }
 
+async fn fetch_or_raise_message(
+    ctx: &SContext, 
+    interaction: &ComponentInteraction, 
+    message_id: u64
+) -> Message {
+    let message = interaction.channel_id.message(&ctx, message_id).await;
+    if message.is_err() {
+        // fetch image message -> error
+        let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new()
+            .content("Seems like the bright picture has vanished. I can't darken what I can't see.")
+        );
+        interaction.create_response(&ctx, response).await.unwrap();
+    }
+    message.unwrap()
+}
+
 async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInteraction, data: &Data) -> Result<()> {
     let content = &interaction.data.custom_id;
-    let options = NordOptions::from_custom_id(&content);
+    let mut options = NordOptions::from_custom_id(&content);
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
     let update = content.split("-").nth(1).unwrap().parse::<bool>().unwrap_or(true);
-    let new_components = options.build_componets(message_id, true);
+
     let mut message: Option<Message> = None;
+    if options.auto_adjust {
+        message = Some(fetch_or_raise_message(&ctx, &interaction, message_id).await);
+        let ref unwrapped = message.as_ref().unwrap();
+        let (image, information) = fetch_image(unwrapped.attachments.first().unwrap(), &unwrapped, ctx, data, &options).await;
+        let new_options = NordOptions::from_image_information(&information);
+        options = NordOptions {start: options.start, ..new_options};
+    }
+
+    let new_components = options.build_componets(message_id, true);
+    
+    println!("options: {:?}", options);
+
     if options.start {
         // start button pressed
-        if let Err(err) = interaction.channel_id.message(&ctx, message_id).await {
-            // fetch image message -> error
-            let response = CreateInteractionResponse::Message(CreateInteractionResponseMessage::new()
-                .content("Seems like the bright picture has vanished. I can't darken what I can't see.")
-            );
-            interaction.create_response(&ctx, response).await?;
+        if message.is_none() {
+            message = Some(fetch_or_raise_message(&ctx, &interaction, message_id).await);
         }
-        message = Some(interaction.channel_id.message(&ctx, message_id).await?);
+        
         if update {
             // first ack, that existing image is being kept
             let response = CreateInteractionResponse::Acknowledge;
@@ -361,20 +385,25 @@ async fn image_check(attachment: &Attachment) -> Result<()> {
     Ok(())
 }
 
-async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment: &Attachment, data: &Data) -> Result<()> {
+async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment: &Attachment, data: &Data) -> Result<(), anyhow::Error> {
     image_check(attachment).await?;
     let url = attachment.url.clone();
-    let image = {
+    let image_and_info: Result<(DynamicImage, ImageInformation), _> = {
         let image = data.image_cache.get(&url).await;
         if image.is_none() {
-            download_image(&attachment).await
+            let image: DynamicImage = download_image(&attachment).await?;
+            Ok::<(DynamicImage, ImageInformation), anyhow::Error>(
+                (image.clone(), colors::calculate_average_brightness(&image.to_rgba8()))
+            )
         } else {
-            Ok(image.unwrap())
+            let image = image.unwrap();
+            Ok(image)
         }
     };
+    let (image, info) = image_and_info.expect("Image or info is none in ask_user_to_darken_image");
     println!("inserting");
-    data.image_cache.insert(url, image.as_ref().unwrap().clone()).await;
-    let bright = colors::calculate_average_brightness(&image?.to_rgba8());
+    data.image_cache.insert(url, (image.clone(), info.clone())).await;
+    let bright = info.brightness.average;
     if bright < 0.4 {
         bail!("Not bright enough: {bright}")
     }
@@ -404,19 +433,33 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
 
     Ok(())
 }
-
-async fn process_image(attachment: &serenity::Attachment, msg: &Message, ctx: &SContext, data: &Data, options: colors::NordOptions) -> Result<DynamicImage> {
-    image_check(attachment).await?;
+async fn fetch_image(
+    attachment: &serenity::Attachment, 
+    msg: &Message, 
+    ctx: &SContext, 
+    data: &Data, 
+    options: &colors::NordOptions
+) -> (DynamicImage, ImageInformation) {
+    image_check(attachment).await.unwrap();
     let url = attachment.url.clone();
-    let mut image = {
+    let image_and_info = {
         let image = data.image_cache.get(&url).await;
         if image.is_none() {
-            download_image(&attachment).await
+            let image = download_image(&attachment).await.unwrap();
+            Ok::<(DynamicImage, ImageInformation), anyhow::Error>(
+                (image.clone(), colors::calculate_average_brightness(&image.to_rgba8()))
+            )
         } else {
             Ok(image.unwrap())
         }
     };
-    Ok(colors::apply_nord(image?, options))
+    image_and_info.unwrap()
+}
+
+
+async fn process_image(attachment: &serenity::Attachment, msg: &Message, ctx: &SContext, data: &Data, options: colors::NordOptions) -> Result<DynamicImage> {
+    let (image, info) = fetch_image(attachment, msg, ctx, data, &options).await;
+    Ok(colors::apply_nord(image, options, &info))
 }
 
 async fn download_image(attachment: &Attachment) -> Result<DynamicImage> {
