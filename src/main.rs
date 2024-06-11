@@ -102,7 +102,7 @@ async fn interaction_create(ctx: SContext, interaction: Interaction, data: &Data
 
 async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInteraction, data: &Data) -> Result<()> {
     let content = &interaction.data.custom_id;
-    let options = parse_nord_custom_id(&content);
+    let options = NordOptions::from_custom_id(&content);
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
     let update = content.split("-").nth(1).unwrap().parse::<bool>().unwrap_or(true);
     let new_components = build_componets(message_id, options.clone(), true);
@@ -158,19 +158,19 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
 }
 
 
-fn make_nord_custom_id(message_id: u64, update: bool, options: &colors::NordOptions) -> String {
-    format!("darken-{}-{}-{}-{}-{}-{}", update, options.invert, options.hue_rotate, options.sepia, options.nord, message_id)
-}
+// fn make_nord_custom_id(message_id: u64, update: bool, options: &colors::NordOptions) -> String {
+//     format!("darken-{}-{}-{}-{}-{}-{}", update, options.invert, options.hue_rotate, options.sepia, options.nord, message_id)
+// }
 
-fn parse_nord_custom_id(custom_id: &str) -> colors::NordOptions {
-    let mut parts = custom_id.split("-").skip(1);
-    let _update = parts.next().unwrap().parse::<bool>().unwrap();
-    let invert = parts.next().unwrap().parse::<bool>().unwrap();
-    let hue_rotate = parts.next().unwrap().parse::<f32>().unwrap();
-    let sepia = parts.next().unwrap().parse::<bool>().unwrap();
-    let nord = parts.next().unwrap().parse::<bool>().unwrap();
-    colors::NordOptions {invert, hue_rotate, sepia, nord}
-}
+// fn parse_nord_custom_id(custom_id: &str) -> colors::NordOptions {
+//     let mut parts = custom_id.split("-").skip(1);
+//     let _update = parts.next().unwrap().parse::<bool>().unwrap();
+//     let invert = parts.next().unwrap().parse::<bool>().unwrap();
+//     let hue_rotate = parts.next().unwrap().parse::<f32>().unwrap();
+//     let sepia = parts.next().unwrap().parse::<bool>().unwrap();
+//     let nord = parts.next().unwrap().parse::<bool>().unwrap();
+//     colors::NordOptions {invert, hue_rotate, sepia, nord}
+// }
 
 fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) -> Vec<CreateActionRow> {
     let mut components = Vec::new();
@@ -184,7 +184,7 @@ fn build_componets(message_id: u64, options: colors::NordOptions, update: bool) 
     ];
     for (label, enabled, option) in option_list {
         action_row.push(
-            CreateButton::new(make_nord_custom_id(message_id, update, &option))
+            CreateButton::new(options.make_nord_custom_id(&message_id, update))
                 .style(ButtonStyle::Secondary)
                 .label(&format!("{}", label))
                 .style(if enabled {ButtonStyle::Primary} else {ButtonStyle::Secondary})
@@ -389,7 +389,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
     }
     let response = CreateMessage::new()
         .content(format!("Bruhh...\n\nThis looks bright as fuck. On a scale from 1 to 9 it's a {:.1}.\nMay I darken it?", bright*9.))
-        .button(CreateButton::new(make_nord_custom_id(message.id.into(), false, &NordOptions::default()))
+        .button(CreateButton::new(NordOptions::default().make_nord_custom_id(&message.id.into(), false))
             .style(ButtonStyle::Primary)
             .emoji("🌙".parse::<ReactionType>().unwrap())
         )
