@@ -116,7 +116,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
             );
             interaction.create_response(&ctx, response).await?;
         }
-        let message = interaction.channel_id.message(&ctx, message_id).await?;
+        message = Some(interaction.channel_id.message(&ctx, message_id).await?);
         if update {
             // first ack, that existing image is being kept
             let response = CreateInteractionResponse::Acknowledge;
@@ -169,10 +169,10 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     }
     // ensure existence of message
     if message.is_none() {
-        interaction.create_followup(&ctx, CreateInteractionResponseFollowup::new()
+        interaction.edit_response(&ctx, EditInteractionResponse::new()
             .content("Seems like the bright picture has vanished. I can't darken what I can't see.")
-            .ephemeral(true)
         ).await?;
+        return Ok(())
     }
     let message = message.unwrap();
     // process image
@@ -380,7 +380,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
     }
     let response = CreateMessage::new()
         .content(format!("Bruhh...\n\nThis looks bright as fuck. On a scale from 1 to 9 it's a {:.1}.\nMay I darken it?", bright*9.))
-        .button(CreateButton::new(NordOptions::default().make_nord_custom_id(&message.id.into(), false))
+        .button(CreateButton::new(NordOptions::new().make_nord_custom_id(&message.id.into(), false))
             .style(ButtonStyle::Primary)
             .emoji("🌙".parse::<ReactionType>().unwrap())
         )
