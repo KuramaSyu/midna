@@ -114,14 +114,19 @@ impl NordOptions {
 
         let mut name_to_color_map = HashMap::<&str, ButtonStyle>::new();
         name_to_color_map.insert("Start", ButtonStyle::Success);
+
         for option_list in option_2d_list {
             let mut action_row = Vec::<CreateButton>::new();
             for (label, enabled, option) in option_list {
                 action_row.push(
                     CreateButton::new(option.make_nord_custom_id(&message_id, update))
-                        .style(ButtonStyle::Secondary)
                         .label(&format!("{}", label))
-                        .style(if enabled {ButtonStyle::Primary} else {ButtonStyle::Secondary})
+                        .style({
+                            *name_to_color_map.get(label).unwrap_or(
+                                if enabled {  &ButtonStyle::Primary } 
+                                else { &ButtonStyle::Secondary }
+                            )
+                        })
                 );
             }
             action_rows.push(action_row);
