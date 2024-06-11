@@ -42,6 +42,28 @@ impl NordOptions {
             erase_when_percentage: 0.3,  // if met: all other filters are ignored
         }
     }
+    
+
+    pub fn make_nord_custom_id(&self, message_id: &u64, update: bool) -> String {
+        format!(
+            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}", 
+            update, self.invert, self.hue_rotate, 
+            self.sepia, self.nord, self.erase_most_present_color, 
+            self.erase_when_percentage, message_id
+        )
+    }
+    
+    pub fn from_custom_id(custom_id: &str) -> Self {
+        let mut parts = custom_id.split("-").skip(1);
+        let _update = parts.next().unwrap().parse::<bool>().unwrap();
+        let invert = parts.next().unwrap().parse::<bool>().unwrap();
+        let hue_rotate = parts.next().unwrap().parse::<f32>().unwrap();
+        let sepia = parts.next().unwrap().parse::<bool>().unwrap();
+        let nord = parts.next().unwrap().parse::<bool>().unwrap();
+        let erase_most_present_color = parts.next().unwrap().parse::<bool>().unwrap();
+        let erase_when_percentage = parts.next().unwrap().parse::<f64>().unwrap();
+        NordOptions {invert, hue_rotate, sepia, nord, erase_most_present_color, erase_when_percentage}
+    }
 }
 
 #[derive(Clone, Debug)]
