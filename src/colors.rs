@@ -1,5 +1,6 @@
 use image::{DynamicImage, GenericImageView, ImageResult, ImageBuffer, RgbaImage, Rgb, Rgba};
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::{borrow::BorrowMut, io::Cursor};
 use env_logger::{Builder, Env};
 use log::{info, warn, debug, Level::Debug, set_max_level};
@@ -16,6 +17,8 @@ pub struct NordOptions {
     pub hue_rotate: f32,
     pub sepia: bool,
     pub nord: bool,
+    pub erase_most_present_color: bool,
+    pub erase_when_percentage: f32,
 }
 
 impl NordOptions {
@@ -25,6 +28,8 @@ impl NordOptions {
             hue_rotate: 0.0,
             sepia: false,
             nord: false,
+            erase_most_present_color: false,
+            erase_when_percentage: 0.3,
         }
     }
     pub fn default() -> Self {
@@ -33,6 +38,8 @@ impl NordOptions {
             hue_rotate: 180.0,
             sepia: true,
             nord: true,
+            erase_most_present_color: true, 
+            erase_when_percentage: 0.3,  // if met: all other filters are ignored
         }
     }
 }
@@ -237,27 +244,6 @@ pub fn apply_tone(image: &mut RgbaImage, target_color: Rgb<f32>, blend_factor: f
 }
 
 pub fn calculate_average_brightness(image: &RgbaImage) -> f32 {
-    // Define maximum dimensions for the resized image
-    // const MAX_DIMENSION: u32 = 800;
-
-    // // Calculate the aspect ratio and determine new dimensions
-    // let (width, height) = image.dimensions();
-    // let (new_width, new_height) = if width > height {
-    //     let new_width = MAX_DIMENSION;
-    //     let new_height = (height as f32 * new_width as f32 / width as f32) as u32;
-    //     (new_width, new_height)
-    // } else {
-    //     let new_height = MAX_DIMENSION;
-    //     let new_width = (width as f32 * new_height as f32 / height as f32) as u32;
-    //     (new_width, new_height)
-    // };
-
-    // // Resize the image if it is larger than the maximum dimensions
-    // let resized_image = if width > MAX_DIMENSION || height > MAX_DIMENSION {
-    //     DynamicImage::ImageRgba8(image.clone()).resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3)
-    // } else {
-    //     DynamicImage::ImageRgba8(image.clone())
-    // };
     let (width, height) = image.dimensions();
     let sample_distance = (width / 50).max(10) as usize;
     let resized_image = DynamicImage::ImageRgba8(image.clone());
@@ -364,4 +350,18 @@ pub fn apply_nord_filter(image: &mut RgbaImage, blend_factor: f32) {
     println!("greyscale: {:.3} - {:.3}", smallest_grey, biggest_grey);
 }
 
+pub fn get_most_present_colors(image: &mut RgbaImage, blend_factor: f32) -> HashMap<(u8, u8, u8), u64> {
+    let mut color_map: HashMap<(u8, u8, u8), u64> = HashMap::new();
+    static SAMPLES_PER_LINE: usize = 50;
+
+    for (i, Rgba([r, g, b, a])) in image.pixels_mut().enumerate() {
+        if i % SAMPLES_PER_LINE != 0 || *a <= 128 {
+            // ignore transparent pixels
+            continue;
+        }
+        let key = (*r, *g, *b);
+        color_map.entry(key).and_modify(|e| *e += 1).or_insert(1);
+    }
+    return color_map;
+}
 
