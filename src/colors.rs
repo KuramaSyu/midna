@@ -229,25 +229,6 @@ impl RgbColor {
     
 }
 
-struct NormalizedRgb {
-    r: f32,
-    g: f32,
-    b: f32,
-}
-
-impl RgbColor {
-    fn normalize(&self) -> NormalizedRgb {
-        let max_value = 255.0; // Maximum value of an 8-bit RGB component
-        NormalizedRgb {
-            r: self.r as f32 / max_value,
-            g: self.g as f32 / max_value,
-            b: self.b as f32 / max_value,
-        }
-    }
-
-}
-
-
 struct PolarNight {}
 impl PolarNight {
     const a: RgbColor = RgbColor {r: 46, g: 52, b: 64};
