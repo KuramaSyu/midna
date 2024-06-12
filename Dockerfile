@@ -13,15 +13,16 @@ RUN apt-get update && apt-get install -y \
 # Set the working directory
 WORKDIR /usr/src/app
 
-# Install ONNX Runtime using apt
-RUN apt-get install -y onnxruntime 
-
 # Install Rust dependencies
 RUN rustup update && \
     rustup component add rustfmt && \
     rustup component add clippy
 
-
+# Download and install ONNX Runtime binary release
+RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.8.1/onnxruntime-linux-x64-1.8.1.tgz && \
+    tar -xzvf onnxruntime-linux-x64-1.8.1.tgz && \
+    mv /onnxruntime-linux-x64-1.8.1/lib/* /usr/local/lib/ && \
+    rm -rf onnxruntime-linux-x64-1.8.1.tgz onnxruntime-linux-x64-1.8.1
 
 # Copy the Cargo.toml and Cargo.lock files
 COPY Cargo.toml ./
