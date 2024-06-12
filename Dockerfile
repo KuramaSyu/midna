@@ -29,9 +29,9 @@ RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.8.1/onnxr
 COPY Cargo.toml ./
 
 # Copy .env file
-COPY .env ./.env
+COPY .env .
 # Copy the source code
-COPY src ./src
+COPY src .
 
 # Build the Rust application
 RUN cargo install --path .
