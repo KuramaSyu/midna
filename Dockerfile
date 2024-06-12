@@ -1,6 +1,6 @@
 # Stage 1: Build the application
-FROM rust:latest
 FROM ubuntu:noble
+FROM rust:latest
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
