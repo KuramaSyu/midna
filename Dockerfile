@@ -21,7 +21,7 @@ RUN rustup update && \
 # Download and install ONNX Runtime binary release
 RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.8.1/onnxruntime-linux-x64-1.8.1.tgz && \
     tar -xzvf onnxruntime-linux-x64-1.8.1.tgz && \
-    mv /onnxruntime-linux-x64-1.8.1/lib/* /usr/local/lib/ && \
+    mv onnxruntime-linux-x64-1.8.1/lib/* /usr/local/lib/ && \
     rm -rf onnxruntime-linux-x64-1.8.1.tgz onnxruntime-linux-x64-1.8.1
 
 # Copy the Cargo.toml and Cargo.lock files
