@@ -13,6 +13,17 @@ RUN apt-get update && apt-get install -y \
 # Set the working directory
 WORKDIR /usr/src/app
 
+# Install ONNX Runtime using apt
+RUN apt-get update && \
+    apt-get install -y \
+    onnxruntime \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust dependencies
+RUN rustup update && \
+    rustup component add rustfmt && \
+    rustup component add clippy
+
 
 
 # Copy the Cargo.toml and Cargo.lock files
