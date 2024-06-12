@@ -89,6 +89,49 @@ impl Models {
         }
     }
 }
+
+
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum ActivationFunction {
+    Linear,
+    Sigmoid,
+    ReLU,
+    Tanh,
+    Softmax,
+}
+impl ActivationFunction {
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(ActivationFunction::Linear),
+            1 => Some(ActivationFunction::Sigmoid),
+            2 => Some(ActivationFunction::ReLU),
+            3 => Some(ActivationFunction::Tanh),
+            4 => Some(ActivationFunction::Softmax),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            ActivationFunction::Linear => &String::from("Linear"),
+            ActivationFunction::Sigmoid => &String::from("Sigmoid"),
+            ActivationFunction::ReLU => &String::from("ReLU"),
+            ActivationFunction::Tanh => &String::from("Tanh"),
+            ActivationFunction::Softmax => &String::from("Softmax"),
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        let values = vec![
+            ActivationFunction::Linear, ActivationFunction::Sigmoid, 
+            // ActivationFunction::ReLU, ActivationFunction::Tanh, 
+            // ActivationFunction::Softmax
+        ];
+        let self_index = values.iter().position(|&x| x == *self).unwrap();
+        let next = self_index + 1 % values.len();
+        values[next]
+    }
+}
 // implement clone
 #[derive(Clone, Debug)]
 pub struct NordOptions {
@@ -101,6 +144,7 @@ pub struct NordOptions {
     pub auto_adjust: bool,
     pub start: bool,
     pub model: Models,
+    pub activation_function: ActivationFunction,
 }
 
 impl NordOptions {
@@ -120,15 +164,19 @@ impl NordOptions {
             auto_adjust: true,
             start: false,
             model: Models::Algorithm,
+            activation_function: ActivationFunction::Sigmoid,
         }
     }
 
     pub fn from_image_information(image_information: &ImageInformation) -> Self {
         let mut options = NordOptions::default();
         let invert_by_brightness = image_information.brightness.average > 0.5;
+        let is_probably_anime = |info: &ImageInformation| -> bool {
+            info.color_map.most_present_color_percentage > 0.005 && info.grayscale_similarity.average > 0.06
+        };
         match image_information.image_type {
             Some(ImageType::Cartoon) => {
-                options.erase_most_present_color = image_information.color_map.most_present_color_percentage > 0.1;
+                options.erase_most_present_color = false;//image_information.color_map.most_present_color_percentage > 0.1;
                 options.invert = invert_by_brightness;
                 options.hue_rotate = 180.;
                 options.sepia = true;
@@ -140,6 +188,7 @@ impl NordOptions {
             },
             Some(ImageType::Picture) => {
             if image_information.color_map.most_present_color_percentage > 0.1 {
+                // image, but replaced monotone background
                 options.invert = false;
                 options.hue_rotate = 0.;
                 options.sepia = false;
@@ -148,17 +197,18 @@ impl NordOptions {
                 options.erase_when_percentage = 0.1;
                 options.auto_adjust = false;
                 options.start = false;
-                options.model = Models::U2net;
+                options.model = if is_probably_anime(image_information) { Models::IsnetAnime } else { Models::IsnetGeneral };
             } else {
+                // image without predominant color
                 options.invert = false;
                 options.hue_rotate = 0.;
-                options.sepia = true;
-                options.nord = true;
-                options.erase_most_present_color = false;
-                options.erase_when_percentage = 0.3;
+                options.sepia = false;
+                options.nord = false;
+                options.erase_most_present_color = true;
+                options.erase_when_percentage = 0.1;
                 options.auto_adjust = false;
                 options.start = false;
-                options.model = Models::IsnetGeneral;
+                options.model = if is_probably_anime(image_information) { Models::IsnetAnime } else { Models::IsnetGeneral };
             }},
             None => {}
         }
@@ -176,16 +226,17 @@ impl NordOptions {
             auto_adjust: false,
             start: false,
             model: Models::IsnetGeneral,
+            activation_function: ActivationFunction::Sigmoid,
         }
     }
 
     pub fn make_nord_custom_id(&self, message_id: &u64, update: bool) -> String {
         format!(
-            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}", 
+            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}-{}", 
             update, self.invert, self.hue_rotate, 
             self.sepia, self.nord, self.erase_most_present_color, 
             self.erase_when_percentage, self.auto_adjust, 
-            self.start, self.model.to_struct().id, message_id
+            self.start, self.model.to_struct().id, self.activation_function as u8,message_id
         )
     }
     
@@ -202,11 +253,14 @@ impl NordOptions {
         let start = parts.next().unwrap().parse::<bool>().unwrap();
         let model_id: usize = parts.next().unwrap().parse::<usize>().unwrap();
         let model = Models::from_id(model_id);
+        let activation_function_id = parts.next().unwrap().parse::<u8>().unwrap();
+        let activation_function = ActivationFunction::from_u8(activation_function_id)
+            .expect(&format!("Invalid ActivationFunction ID: {}", activation_function_id));
         NordOptions {
             invert, hue_rotate, sepia, 
             nord, erase_most_present_color, 
             erase_when_percentage, auto_adjust, 
-            start, model,
+            start, model, activation_function,
         }
     }
     pub fn build_componets(&self, message_id: u64, update: bool) -> Vec<CreateActionRow> {
@@ -215,36 +269,55 @@ impl NordOptions {
         let mut self_no_start = self.clone();
         self_no_start.start = false;
 
+        let is_erase_active = |x: &Self| {
+            x.erase_most_present_color && x.model != Models::Algorithm
+        };
+
+        let is_model_enabled = |x: &Self| {
+            x.model != Models::Algorithm && x.erase_most_present_color
+        };
+
         // make option lists, so that the clicked button is inverted
-        let mut option_2d_list = vec![
+        let mut option_2d_list: Vec<Vec<(&str, bool, NordOptions, bool)>> = vec![
             // component row
             vec![
                 // component
-                //name: intert, enabled/disabled, When click, then switch enabled/disabled
-                ("Invert", self.invert, NordOptions {invert: !self.invert, ..self_no_start}),
-                ("Hue Rotate", if self.hue_rotate == 180. {true} else {false}, NordOptions {hue_rotate: if self.hue_rotate == 180. {0.} else {180.}, ..self_no_start}),
-                ("Sepia", self.sepia, NordOptions {sepia: !self.sepia, ..self_no_start}),
-                ("Nord", self.nord, NordOptions {nord: !self.nord, ..self_no_start}),
+                //name: intert, enabled/disabled, When click, then switch enabled/disabled, is enabled
+                ("Invert", self.invert, NordOptions {invert: !self.invert, ..self_no_start}, true),
+                ("Hue Rotate", if self.hue_rotate == 180. {true} else {false}, NordOptions {hue_rotate: if self.hue_rotate == 180. {0.} else {180.}, ..self_no_start}, true),
+                ("Sepia", self.sepia, NordOptions {sepia: !self.sepia, ..self_no_start}, true),
+                ("Nord", self.nord, NordOptions {nord: !self.nord, ..self_no_start}, true),
             ],
             vec![
-                ("Erase Background", self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start} ),
-                ("General Use", self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}),
-                ("[AI] General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}),
-                ("[AI] General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}),
-                ("[AI] Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}),
+                ("Erase Background", self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start}, true),
+                ("General Use", self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}, is_model_enabled(self)),
+                ("[AI] General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}, is_model_enabled(self)),
+                ("[AI] General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
+                ("[AI] Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}, is_model_enabled(self)),
             ],
         ];
+        let mut optional_components: Vec<(&str, bool, NordOptions, bool)> = vec![];
         if !self.start {
-            option_2d_list.push(vec![
-                ("Start", self.start, NordOptions {start: !self.start, ..self_no_start}),
-            ])
+            optional_components.push(
+                ("Start", self.start, NordOptions {start: !self.start, ..self_no_start}, true),
+            )
         }
+        if is_erase_active(&self) {
+            optional_components.push(
+                (self.activation_function.as_str(), true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self)),
+            )
+        }
+        option_2d_list.push(optional_components);
+
         let mut name_to_color_map = HashMap::<&str, ButtonStyle>::new();
         name_to_color_map.insert("Start", ButtonStyle::Success);
 
         for option_list in option_2d_list {
+            if option_list.len() == 0 {
+                continue;
+            }
             let mut action_row = Vec::<CreateButton>::new();
-            for (label, enabled, option) in option_list {
+            for (label, enabled, option, is_enabled) in option_list {
                 println!("CustomID: {} Label: {}", option.make_nord_custom_id(&message_id, update), label);
                 action_row.push(
                     CreateButton::new(option.make_nord_custom_id(&message_id, update))
@@ -255,6 +328,7 @@ impl NordOptions {
                                 else { &ButtonStyle::Secondary }
                             )
                         })
+                        .disabled(!is_enabled)
                 );
             }
             action_rows.push(action_row);
@@ -850,7 +924,11 @@ fn segment_image<'a>(
     let tensor = output.into_iter().next().unwrap();
     Ok(tensor)
 }
-fn apply_mask(image: &DynamicImage, mask: &onnxruntime::tensor::OrtOwnedTensor<f32, ndarray::Dim<ndarray::IxDynImpl>>) -> DynamicImage {
+fn apply_mask(
+    image: &DynamicImage, 
+    mask: &onnxruntime::tensor::OrtOwnedTensor<f32, ndarray::Dim<ndarray::IxDynImpl>>,
+    options: &NordOptions
+) -> DynamicImage {
     let (orig_width, orig_height) = image.dimensions();
     let mask_width = mask.shape()[2] as u32;
     let mask_height = mask.shape()[3] as u32;
@@ -869,9 +947,16 @@ fn apply_mask(image: &DynamicImage, mask: &onnxruntime::tensor::OrtOwnedTensor<f
     );
 
 
-    let resized_mask = mask_image.resize_exact(orig_width, orig_height, image::imageops::FilterType::Nearest).to_luma8();
+    let resized_mask = mask_image.resize_exact(orig_width, orig_height, image::imageops::FilterType::Gaussian).to_luma8();
 
     let mut masked_image = RgbaImage::new(orig_width, orig_height);
+
+    let sigmoid = |x: u8| -> u8 {
+        let x = x as f32 / 255.0; // Normalize to range [0, 1]
+        let sigmoid_value = 255.0 / (1.0 + (-5.0 * (0.5 - x).exp()));
+        sigmoid_value as u8
+    };
+
     for (x, y, pixel) in masked_image.enumerate_pixels_mut() {
         let pixel_value = image.get_pixel(x, y);
         let mask_value = resized_mask.get_pixel(x, y)[0];
@@ -881,7 +966,7 @@ fn apply_mask(image: &DynamicImage, mask: &onnxruntime::tensor::OrtOwnedTensor<f
         // Modify alpha channel based on mask value
         // let alpha = if mask_value > 170 { a } else { mask_value / 170 * 255 }; // Set transparency if mask_value <= 127
 
-        *pixel = image::Rgba([r, g, b, mask_value]);
+        *pixel = image::Rgba([r, g, b, sigmoid(mask_value)]);
     }
 
     DynamicImage::ImageRgba8(masked_image)
@@ -890,6 +975,6 @@ fn apply_mask(image: &DynamicImage, mask: &onnxruntime::tensor::OrtOwnedTensor<f
 
 pub fn remove_background<'a>(mut session: Session<'_>, image: DynamicImage, options: &NordOptions) -> DynamicImage {
     let mask = segment_image(&mut session, &image, &options).unwrap();
-    let segmented_image = apply_mask(&image, &mask);
+    let segmented_image = apply_mask(&image, &mask, &options);
     segmented_image
 }
