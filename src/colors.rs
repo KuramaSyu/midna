@@ -2,6 +2,7 @@ use image::{DynamicImage, GenericImageView, ImageResult, ImageBuffer, RgbaImage,
 use imageproc::filter::gaussian_blur_f32;
 use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
+use serenity::model;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::vec;
@@ -26,6 +27,68 @@ pub fn get_image() -> ImageResult<DynamicImage> {
 
     image
 }
+
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum Models {
+    U2net,
+    IsnetAnime,
+    IsnetGeneral,
+    Algorithm,
+}
+
+#[derive(Clone, Debug)]
+pub struct Model {
+    pub id: usize,
+    pub path: String,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Models {
+    pub fn to_struct(&self) -> Model {
+        match self {
+            Models::U2net => Model {
+                id: 0,
+                path: String::from("models/u2net.onnx"),
+                name: String::from("AI General 2"),
+                width: 320,
+                height: 320,
+            },
+            Models::IsnetAnime => Model {
+                id: 1,
+                path: String::from("models/isnet-anime.onnx"),
+                name: String::from("AI Anime"),
+                width: 1024,
+                height: 1024,
+            },
+            Models::IsnetGeneral => Model {
+                id: 2,
+                path: String::from("models/isnet-general-use.onnx"),
+                name: String::from("AI General"),
+                width: 1024,
+                height: 1024,
+            },
+            Models::Algorithm => Model {    
+                id: 3,
+                path: String::from("LOCAL"),
+                name: String::from("General"),
+                width: 320,
+                height: 320,
+            }
+        }
+    }
+
+    pub fn from_id(id: usize) -> Self {
+        match id {
+            0 => Models::U2net,
+            1 => Models::IsnetAnime,
+            2 => Models::IsnetGeneral,
+            3 => Models::Algorithm,
+            _ => Models::Algorithm,
+        }
+    }
+}
 // implement clone
 #[derive(Clone, Debug)]
 pub struct NordOptions {
@@ -37,6 +100,7 @@ pub struct NordOptions {
     pub erase_when_percentage: f64,
     pub auto_adjust: bool,
     pub start: bool,
+    pub model: Models,
 }
 
 impl NordOptions {
@@ -55,6 +119,7 @@ impl NordOptions {
             erase_when_percentage: 0.3,  // if met: all other filters are ignored
             auto_adjust: true,
             start: false,
+            model: Models::Algorithm,
         }
     }
 
@@ -71,6 +136,7 @@ impl NordOptions {
                 options.erase_when_percentage = 0.1;
                 options.auto_adjust = false;
                 options.start = false;
+                options.model = Models::Algorithm;
             },
             Some(ImageType::Picture) => {
             if image_information.color_map.most_present_color_percentage > 0.1 {
@@ -82,6 +148,7 @@ impl NordOptions {
                 options.erase_when_percentage = 0.1;
                 options.auto_adjust = false;
                 options.start = false;
+                options.model = Models::U2net;
             } else {
                 options.invert = false;
                 options.hue_rotate = 0.;
@@ -91,6 +158,7 @@ impl NordOptions {
                 options.erase_when_percentage = 0.3;
                 options.auto_adjust = false;
                 options.start = false;
+                options.model = Models::IsnetGeneral;
             }},
             None => {}
         }
@@ -107,16 +175,17 @@ impl NordOptions {
             erase_when_percentage: 0.3,  // if met: all other filters are ignored
             auto_adjust: false,
             start: false,
+            model: Models::IsnetGeneral,
         }
     }
 
     pub fn make_nord_custom_id(&self, message_id: &u64, update: bool) -> String {
         format!(
-            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}", 
+            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}", 
             update, self.invert, self.hue_rotate, 
             self.sepia, self.nord, self.erase_most_present_color, 
             self.erase_when_percentage, self.auto_adjust, 
-            self.start, message_id
+            self.start, self.model.to_struct().id, message_id
         )
     }
     
@@ -131,11 +200,13 @@ impl NordOptions {
         let erase_when_percentage = parts.next().unwrap().parse::<f64>().unwrap();
         let auto_adjust = parts.next().unwrap().parse::<bool>().unwrap();
         let start = parts.next().unwrap().parse::<bool>().unwrap();
+        let model_id: usize = parts.next().unwrap().parse::<usize>().unwrap();
+        let model = Models::from_id(model_id);
         NordOptions {
             invert, hue_rotate, sepia, 
             nord, erase_most_present_color, 
             erase_when_percentage, auto_adjust, 
-            start
+            start, model,
         }
     }
     pub fn build_componets(&self, message_id: u64, update: bool) -> Vec<CreateActionRow> {
@@ -145,7 +216,7 @@ impl NordOptions {
         self_no_start.start = false;
 
         // make option lists, so that the clicked button is inverted
-        let option_2d_list = vec![
+        let mut option_2d_list = vec![
             // component row
             vec![
                 // component
@@ -156,20 +227,25 @@ impl NordOptions {
                 ("Nord", self.nord, NordOptions {nord: !self.nord, ..self_no_start}),
             ],
             vec![
-                ("Erase Background", self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start} )
+                ("Erase Background", self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start} ),
+                ("General", self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}),
+                ("Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}),
+                ("General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}),
+                ("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start})
             ],
-            vec![
-                ("Start", self.start, NordOptions {start: !self.start, ..self_no_start}),
-            ]
-    
         ];
-
+        if !self.start {
+            option_2d_list.push(vec![
+                ("Start", self.start, NordOptions {start: !self.start, ..self_no_start}),
+            ])
+        }
         let mut name_to_color_map = HashMap::<&str, ButtonStyle>::new();
         name_to_color_map.insert("Start", ButtonStyle::Success);
 
         for option_list in option_2d_list {
             let mut action_row = Vec::<CreateButton>::new();
             for (label, enabled, option) in option_list {
+                println!("CustomID: {} Label: {}", option.make_nord_custom_id(&message_id, update), label);
                 action_row.push(
                     CreateButton::new(option.make_nord_custom_id(&message_id, update))
                         .label(&format!("{}", label))
@@ -334,7 +410,7 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
     //image = image.grayscale();
     let image_information = calculate_average_brightness(&image.to_rgba8());
     println!("Brightness of image is: {:.3}", image_information.brightness.average);
-
+    let model_path = options.model.to_struct().path;
     let environment = Environment::builder()
     .with_name("background_removal")
     .with_log_level(onnxruntime::LoggingLevel::Warning)
@@ -344,25 +420,29 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
         environment
         .new_session_builder().unwrap()
         .with_optimization_level(GraphOptimizationLevel::Basic).unwrap()
-        .with_model_from_file("models/u2net.onnx").unwrap()
+        .with_model_from_file(model_path).unwrap()
     ;
     
 
     if options.erase_most_present_color {
 
-    
-        let segmented_image = remove_background(session, image);
-        image = segmented_image.clone();
-        // task::spawn_blocking(move || segmented_image.save(output_image_path)).await??;
-        // Remove most present color if above threshold
-        // let mut mod_image = image.to_rgba8();
-        // let (most_present_color, percentage) = get_most_present_colors(&mut mod_image);
-        // println!("Most present color: {:?} with percentage {:.3}", most_present_color, percentage);
-        // if percentage >= options.erase_when_percentage {
-        //     // there is actually a color to remove -> remove it
-        //     remove_most_present_colors(&mut mod_image, most_present_color, 40.);
-        //     image = DynamicImage::from(mod_image);
-        // }
+        if options.model != Models::Algorithm {
+            // Remove background
+            let segmented_image = remove_background(session, image, &options);
+            image = segmented_image.clone();
+        } else {
+            //Remove most present color if above threshold
+            let mut mod_image = image.to_rgba8();
+            let (most_present_color, percentage) = get_most_present_colors(&mut mod_image);
+            println!("Most present color: {:?} with percentage {:.3}", most_present_color, percentage);
+            if percentage >= options.erase_when_percentage {
+                // there is actually a color to remove -> remove it
+                remove_most_present_colors(&mut mod_image, most_present_color, 40.);
+                image = DynamicImage::from(mod_image);
+            }
+        }
+
+
     }
 
     if options.invert {
@@ -737,9 +817,10 @@ fn get_image_information(image: &RgbaImage) -> ImageInformation {
 
 
 
-fn preprocess_image(image: &DynamicImage) -> Array4<f32> {
-    const nwidth: u32 = 320;
-    const nheight: u32 = 320;
+fn preprocess_image(image: &DynamicImage, options: &NordOptions) -> Array4<f32> {
+    let model = options.model.to_struct();
+    let nwidth: u32 = model.width;
+    let nheight: u32 = model.height;
     let resized = image.resize_exact(nwidth, nheight, image::imageops::FilterType::Nearest);
     let rgb_image = resized.to_rgb8();
 
@@ -755,16 +836,16 @@ fn preprocess_image(image: &DynamicImage) -> Array4<f32> {
 
 fn segment_image<'a>(
     session: &'a mut Session<'_>, 
-    image: &DynamicImage
+    image: &DynamicImage,
+    options: &NordOptions
 ) -> Result<
     onnxruntime::tensor::OrtOwnedTensor<'a, 'a, f32, ndarray::Dim<ndarray::IxDynImpl>>,
     Box<dyn std::error::Error>
 > 
 {
-    let input_tensor = preprocess_image(image);
+    let input_tensor = preprocess_image(image, &options);
     println!("Input tensor shape: {:?}", input_tensor.shape());
     let input_array = vec![input_tensor];
-    println!("start running, shape: {:?}", input_array[0].shape());
     let output: Vec<OrtOwnedTensor<f32, ndarray::Dim<ndarray::IxDynImpl>>> = session.run(input_array).unwrap();
     println!("Output tensor shape: {:?}", output[0].shape());
     let tensor = output.into_iter().next().unwrap();
@@ -799,7 +880,7 @@ fn apply_mask(image: &DynamicImage, mask: &onnxruntime::tensor::OrtOwnedTensor<f
         let [r, g, b, a] = pixel_value.0;
 
         // Modify alpha channel based on mask value
-        let alpha = if mask_value > 127 { a } else { 0 }; // Set transparency if mask_value <= 127
+        // let alpha = if mask_value > 170 { a } else { mask_value / 170 * 255 }; // Set transparency if mask_value <= 127
 
         *pixel = image::Rgba([r, g, b, mask_value]);
     }
@@ -808,8 +889,8 @@ fn apply_mask(image: &DynamicImage, mask: &onnxruntime::tensor::OrtOwnedTensor<f
 }
 
 
-pub fn remove_background<'a>(mut session: Session<'_>, image: DynamicImage) -> DynamicImage {
-    let mask = segment_image(&mut session, &image).unwrap();
+pub fn remove_background<'a>(mut session: Session<'_>, image: DynamicImage, options: &NordOptions) -> DynamicImage {
+    let mask = segment_image(&mut session, &image, &options).unwrap();
     let segmented_image = apply_mask(&image, &mask);
     segmented_image
 }
