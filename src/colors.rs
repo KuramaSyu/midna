@@ -128,7 +128,7 @@ impl ActivationFunction {
             // ActivationFunction::Softmax
         ];
         let self_index = values.iter().position(|&x| x == *self).unwrap();
-        let next = self_index + 1 % values.len();
+        let next = self_index + 1 % (values.len() - 1);
         values[next]
     }
 }
@@ -951,11 +951,18 @@ fn apply_mask(
 
     let mut masked_image = RgbaImage::new(orig_width, orig_height);
 
+    // choose activation function
+    let mut activation_function: fn(u8) -> u8 = |x| x;
     let sigmoid = |x: u8| -> u8 {
         let x = x as f32 / 255.0; // Normalize to range [0, 1]
         let sigmoid_value = 255.0 / (1.0 + (-5.0 * (0.5 - x).exp()));
         sigmoid_value as u8
     };
+
+    if options.activation_function == ActivationFunction::Sigmoid {
+        activation_function = sigmoid;
+    }
+
 
     for (x, y, pixel) in masked_image.enumerate_pixels_mut() {
         let pixel_value = image.get_pixel(x, y);
@@ -966,7 +973,7 @@ fn apply_mask(
         // Modify alpha channel based on mask value
         // let alpha = if mask_value > 170 { a } else { mask_value / 170 * 255 }; // Set transparency if mask_value <= 127
 
-        *pixel = image::Rgba([r, g, b, sigmoid(mask_value)]);
+        *pixel = image::Rgba([r, g, b, activation_function(mask_value)]);
     }
 
     DynamicImage::ImageRgba8(masked_image)
