@@ -1,6 +1,7 @@
 #![warn(clippy::str_to_string)]
 mod commands;
 use colors::{ImageInformation, NordOptions};
+use onnxruntime::{environment::Environment, session::Session, GraphOptimizationLevel};
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
 use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType};
