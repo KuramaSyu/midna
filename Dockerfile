@@ -19,10 +19,11 @@ RUN rustup update && \
     rustup component add clippy
 
 # Download and install ONNX Runtime binary release
-RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.8.1/onnxruntime-linux-x64-1.8.1.tgz && \
-    tar -xzvf onnxruntime-linux-x64-1.8.1.tgz && \
-    mv onnxruntime-linux-x64-1.8.1/lib/* /usr/local/lib/ && \
-    rm -rf onnxruntime-linux-x64-1.8.1.tgz onnxruntime-linux-x64-1.8.1
+# Download and extract ONNX Runtime
+RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.8.1/onnxruntime-linux-x64-1.8.1.tgz \
+    && tar -xzf onnxruntime-linux-x64-1.8.1.tgz \
+    && mv onnxruntime-linux-x64-1.8.1 /opt/onnxruntime \
+    && ldconfig /opt/onnxruntime/lib
 
 # Copy the Cargo.toml and Cargo.lock files
 COPY Cargo.toml ./
