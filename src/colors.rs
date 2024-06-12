@@ -341,7 +341,7 @@ pub async fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &I
     let session = environment
         .new_session_builder().unwrap()
         .with_optimization_level(GraphOptimizationLevel::Basic).unwrap()
-        .with_model_from_file("path/to/your/model.onnx").unwrap();
+        .with_model_from_file("models/u2net.onnx").unwrap();
     
 
     if options.erase_most_present_color {
