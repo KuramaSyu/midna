@@ -8,7 +8,10 @@ use std::{borrow::BorrowMut, io::Cursor};
 use env_logger::{Builder, Env};
 use log::{info, warn, debug, Level::Debug, set_max_level};
 use image::io::Reader as ImageReader;
-
+use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTensor, GraphOptimizationLevel};
+use std::error::Error;
+use tokio::task;
+use ndarray;
 
 #[derive(Clone, Debug)]
 pub enum ImageType {
@@ -323,29 +326,39 @@ impl Nord {
 }
 
 
-pub fn get_recommended_nord_options(mut image: DynamicImage) -> NordOptions {
-    NordOptions::default()
-}
-pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageInformation) -> DynamicImage {
+pub async fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageInformation) -> DynamicImage {
     let mut image = _image.clone();
     println!("{:?}", image.dimensions());
     //image = image.grayscale();
     let image_information = calculate_average_brightness(&image.to_rgba8());
     println!("Brightness of image is: {:.3}", image_information.brightness.average);
 
+    let environment = Environment::builder()
+    .with_name("background_removal")
+    .with_log_level(onnxruntime::LoggingLevel::Warning)
+    .build().unwrap();
+
+    let session = environment
+        .new_session_builder().unwrap()
+        .with_optimization_level(GraphOptimizationLevel::Basic).unwrap()
+        .with_model_from_file("path/to/your/model.onnx").unwrap();
     
 
-
     if options.erase_most_present_color {
+
+    
+        let segmented_image = remove_background(&environment, session, image).await.unwrap();
+        image = segmented_image.clone();
+        // task::spawn_blocking(move || segmented_image.save(output_image_path)).await??;
         // Remove most present color if above threshold
-        let mut mod_image = image.to_rgba8();
-        let (most_present_color, percentage) = get_most_present_colors(&mut mod_image);
-        println!("Most present color: {:?} with percentage {:.3}", most_present_color, percentage);
-        if percentage >= options.erase_when_percentage {
-            // there is actually a color to remove -> remove it
-            remove_most_present_colors(&mut mod_image, most_present_color, 40.);
-            image = DynamicImage::from(mod_image);
-        }
+        // let mut mod_image = image.to_rgba8();
+        // let (most_present_color, percentage) = get_most_present_colors(&mut mod_image);
+        // println!("Most present color: {:?} with percentage {:.3}", most_present_color, percentage);
+        // if percentage >= options.erase_when_percentage {
+        //     // there is actually a color to remove -> remove it
+        //     remove_most_present_colors(&mut mod_image, most_present_color, 40.);
+        //     image = DynamicImage::from(mod_image);
+        // }
     }
 
     if options.invert {
@@ -561,15 +574,6 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-// fn map_distance_to_transparency(distance: f32, max_distance: f32) -> u8 {
-//     if distance >= max_distance {
-//         0
-//     } else {
-//         let alpha = distance / max_distance;
-//         (alpha * 255.0) as u8
-//     }
-// }
-
 fn map_distance_to_transparency(distance: f32, max_distance: f32) -> u8 {
     if distance >= max_distance {
         0
@@ -725,4 +729,60 @@ fn get_image_information(image: &RgbaImage) -> ImageInformation {
         image_information.image_type = Some(ImageType::Picture);
     }
     image_information
+}
+
+
+
+fn preprocess_image(image: &DynamicImage) -> Array4<f32> {
+    let resized = image.resize_exact(224, 224, image::imageops::FilterType::Nearest);
+    let rgb_image = resized.to_rgb8();
+
+    let mut input_tensor = Array4::<f32>::zeros((1, 3, 224, 224));
+    for (y, x, pixel) in rgb_image.enumerate_pixels() {
+        input_tensor[[0, 0, y as usize, x as usize]] = pixel[0] as f32 / 255.0;
+        input_tensor[[0, 1, y as usize, x as usize]] = pixel[1] as f32 / 255.0;
+        input_tensor[[0, 2, y as usize, x as usize]] = pixel[2] as f32 / 255.0;
+    }
+
+    input_tensor
+}
+
+async fn segment_image<'a>(
+    env: &Environment, 
+    session: &'a mut onnxruntime::session::Session<'_>, 
+    image: &DynamicImage
+) -> Result<
+    onnxruntime::tensor::OrtOwnedTensor<'a, 'a, f32, ndarray::Dim<ndarray::IxDynImpl>>, 
+    Box<dyn std::error::Error>
+> 
+{
+    let input_tensor = preprocess_image(image);
+
+    let input_array = vec![input_tensor.into()];
+    let output = session.run(input_array)?;
+
+    let tensor = output.into_iter().next().unwrap();
+    Ok(tensor)
+}
+fn apply_mask(image: &DynamicImage, mask: &OrtOwnedTensor<f32, ndarray::Dim<ndarray::IxDynImpl>>) -> DynamicImage {
+    let (width, height) = image.dimensions();
+    let mut masked_image = RgbaImage::new(width, height);
+
+    for (x, y, pixel) in masked_image.enumerate_pixels_mut() {
+        let pixel_value = image.get_pixel(x, y);
+        let mask_value = mask[[0, y as usize, x as usize]];
+        if mask_value > 0.5 {
+            *pixel = pixel_value;
+        } else {
+            *pixel = image::Rgba([255, 255, 255, 255]); // White background
+        }
+    }
+
+    DynamicImage::ImageRgba8(masked_image)
+}
+
+pub async fn remove_background<'a>(env: &Environment, mut session: onnxruntime::session::Session<'a>, image: DynamicImage) -> Result<DynamicImage, Box<dyn Error>> {
+    let mask = segment_image(&env, &mut session, &image).await?;
+    let segmented_image = apply_mask(&image, &mask);
+    Ok(segmented_image)
 }
