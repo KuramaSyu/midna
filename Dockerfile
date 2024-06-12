@@ -14,10 +14,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/src/app
 
 # Install ONNX Runtime using apt
-RUN apt-get update && \
-    apt-get install -y \
-    onnxruntime \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get install -y onnxruntime 
 
 # Install Rust dependencies
 RUN rustup update && \
