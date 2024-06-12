@@ -113,11 +113,11 @@ impl ActivationFunction {
 
     pub fn as_str(&self) -> &str {
         match self {
-            ActivationFunction::Linear => &String::from("Linear"),
-            ActivationFunction::Sigmoid => &String::from("Sigmoid"),
-            ActivationFunction::ReLU => &String::from("ReLU"),
-            ActivationFunction::Tanh => &String::from("Tanh"),
-            ActivationFunction::Softmax => &String::from("Softmax"),
+            ActivationFunction::Linear => "Linear",
+            ActivationFunction::Sigmoid => "Sigmoid",
+            ActivationFunction::ReLU => "ReLU",
+            ActivationFunction::Tanh => "Tanh",
+            ActivationFunction::Softmax => "Softmax",
         }
     }
 
