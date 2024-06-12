@@ -6,7 +6,7 @@ use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
 use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType};
 use std::{
-    collections::HashMap, fmt, io::Cursor, sync::{Arc, Mutex}, time::Duration
+    collections::HashMap, env, fmt, io::Cursor, sync::{Arc, Mutex}, time::Duration
 };
 use anyhow::{bail, Result};
 use thiserror::Error;
@@ -320,9 +320,11 @@ async fn main() {
         .options(options)
         .build();
 
-    // let token = var("DISCORD_TOKEN")
-    //     .expect("Missing `DISCORD_TOKEN` env var, see README for more information.");
-    let token = std::env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN must be set in .env");
+    for (key, value) in env::vars() {
+        println!("{}: {}", key, value);
+    }
+    // load DISCORD_TOKEN from .env file
+    let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN must be set in .env");
     let intents =
         serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
 
