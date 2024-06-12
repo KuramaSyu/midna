@@ -7,5 +7,5 @@ services:
       - "8000:8000"
     volumes:
       - .:/usr/src/app
-      - ./data/models:/usr/src/app/models
+      - ../data/models:/usr/src/app/models
     command: ["image2nord"]
