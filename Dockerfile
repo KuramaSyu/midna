@@ -31,7 +31,7 @@ COPY Cargo.toml ./
 # Copy .env file
 COPY .env .
 # Copy the source code
-COPY src .
+COPY src ./src
 
 # Build the Rust application
 RUN cargo install --path .
