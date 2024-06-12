@@ -1,5 +1,6 @@
 use image::{DynamicImage, GenericImageView, ImageResult, ImageBuffer, RgbaImage, Rgb, Rgba, Pixel};
 use imageproc::filter::gaussian_blur_f32;
+use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -12,6 +13,7 @@ use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTen
 use std::error::Error;
 use tokio::task;
 use ndarray;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Clone, Debug)]
 pub enum ImageType {
@@ -326,7 +328,7 @@ impl Nord {
 }
 
 
-pub async fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageInformation) -> DynamicImage {
+pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageInformation) -> DynamicImage {
     let mut image = _image.clone();
     println!("{:?}", image.dimensions());
     //image = image.grayscale();
@@ -338,16 +340,18 @@ pub async fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &I
     .with_log_level(onnxruntime::LoggingLevel::Warning)
     .build().unwrap();
 
-    let session = environment
+    let session = 
+        environment
         .new_session_builder().unwrap()
         .with_optimization_level(GraphOptimizationLevel::Basic).unwrap()
-        .with_model_from_file("models/u2net.onnx").unwrap();
+        .with_model_from_file("models/u2net.onnx").unwrap()
+    ;
     
 
     if options.erase_most_present_color {
 
     
-        let segmented_image = remove_background(&environment, session, image).await.unwrap();
+        let segmented_image = remove_background(session, image);
         image = segmented_image.clone();
         // task::spawn_blocking(move || segmented_image.save(output_image_path)).await??;
         // Remove most present color if above threshold
@@ -734,55 +738,78 @@ fn get_image_information(image: &RgbaImage) -> ImageInformation {
 
 
 fn preprocess_image(image: &DynamicImage) -> Array4<f32> {
-    let resized = image.resize_exact(224, 224, image::imageops::FilterType::Nearest);
+    const nwidth: u32 = 320;
+    const nheight: u32 = 320;
+    let resized = image.resize_exact(nwidth, nheight, image::imageops::FilterType::Nearest);
     let rgb_image = resized.to_rgb8();
 
-    let mut input_tensor = Array4::<f32>::zeros((1, 3, 224, 224));
+    let mut input_tensor = Array4::<f32>::zeros((1, 3, nheight as usize, nwidth as usize));
     for (y, x, pixel) in rgb_image.enumerate_pixels() {
-        input_tensor[[0, 0, y as usize, x as usize]] = pixel[0] as f32 / 255.0;
-        input_tensor[[0, 1, y as usize, x as usize]] = pixel[1] as f32 / 255.0;
-        input_tensor[[0, 2, y as usize, x as usize]] = pixel[2] as f32 / 255.0;
+        input_tensor[[0, 0, x as usize, y as usize]] = pixel[0] as f32 / 255.0;
+        input_tensor[[0, 1, x as usize, y as usize]] = pixel[1] as f32 / 255.0;
+        input_tensor[[0, 2, x as usize, y as usize]] = pixel[2] as f32 / 255.0;
     }
 
     input_tensor
 }
 
-async fn segment_image<'a>(
-    env: &Environment, 
-    session: &'a mut onnxruntime::session::Session<'_>, 
+fn segment_image<'a>(
+    session: &'a mut Session<'_>, 
     image: &DynamicImage
 ) -> Result<
-    onnxruntime::tensor::OrtOwnedTensor<'a, 'a, f32, ndarray::Dim<ndarray::IxDynImpl>>, 
+    onnxruntime::tensor::OrtOwnedTensor<'a, 'a, f32, ndarray::Dim<ndarray::IxDynImpl>>,
     Box<dyn std::error::Error>
 > 
 {
     let input_tensor = preprocess_image(image);
-
-    let input_array = vec![input_tensor.into()];
-    let output = session.run(input_array)?;
-
+    println!("Input tensor shape: {:?}", input_tensor.shape());
+    let input_array = vec![input_tensor];
+    println!("start running, shape: {:?}", input_array[0].shape());
+    let output: Vec<OrtOwnedTensor<f32, ndarray::Dim<ndarray::IxDynImpl>>> = session.run(input_array).unwrap();
+    println!("Output tensor shape: {:?}", output[0].shape());
     let tensor = output.into_iter().next().unwrap();
     Ok(tensor)
 }
-fn apply_mask(image: &DynamicImage, mask: &OrtOwnedTensor<f32, ndarray::Dim<ndarray::IxDynImpl>>) -> DynamicImage {
-    let (width, height) = image.dimensions();
-    let mut masked_image = RgbaImage::new(width, height);
+fn apply_mask(image: &DynamicImage, mask: &onnxruntime::tensor::OrtOwnedTensor<f32, ndarray::Dim<ndarray::IxDynImpl>>) -> DynamicImage {
+    let (orig_width, orig_height) = image.dimensions();
+    let mask_width = mask.shape()[2] as u32;
+    let mask_height = mask.shape()[3] as u32;
 
+    // Convert the mask to a Vec<u8> by scaling f32 values to u8
+    let mask_data: Vec<u8> = mask
+    .to_slice()
+    .unwrap()
+    .iter()
+    .map(|&v| (v * 255.0).min(255.0).max(0.0) as u8)
+    .collect();
+
+    // Ensure mask dimensions match image dimensions
+    let mask_image = DynamicImage::ImageLuma8(
+        image::GrayImage::from_raw(mask_width, mask_height, mask_data).unwrap()
+    );
+
+
+    let resized_mask = mask_image.resize_exact(orig_width, orig_height, image::imageops::FilterType::Nearest).to_luma8();
+
+    let mut masked_image = RgbaImage::new(orig_width, orig_height);
     for (x, y, pixel) in masked_image.enumerate_pixels_mut() {
         let pixel_value = image.get_pixel(x, y);
-        let mask_value = mask[[0, y as usize, x as usize]];
-        if mask_value > 0.5 {
-            *pixel = pixel_value;
-        } else {
-            *pixel = image::Rgba([255, 255, 255, 255]); // White background
-        }
+        let mask_value = resized_mask.get_pixel(x, y)[0];
+        // // Extract the original pixel's RGBA values
+        let [r, g, b, a] = pixel_value.0;
+
+        // Modify alpha channel based on mask value
+        let alpha = if mask_value > 127 { a } else { 0 }; // Set transparency if mask_value <= 127
+
+        *pixel = image::Rgba([r, g, b, mask_value]);
     }
 
     DynamicImage::ImageRgba8(masked_image)
 }
 
-pub async fn remove_background<'a>(env: &Environment, mut session: onnxruntime::session::Session<'a>, image: DynamicImage) -> Result<DynamicImage, Box<dyn Error>> {
-    let mask = segment_image(&env, &mut session, &image).await?;
+
+pub fn remove_background<'a>(mut session: Session<'_>, image: DynamicImage) -> DynamicImage {
+    let mask = segment_image(&mut session, &image).unwrap();
     let segmented_image = apply_mask(&image, &mask);
-    Ok(segmented_image)
+    segmented_image
 }
