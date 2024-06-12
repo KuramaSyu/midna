@@ -228,10 +228,10 @@ impl NordOptions {
             ],
             vec![
                 ("Erase Background", self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start} ),
-                ("General", self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}),
-                ("Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}),
-                ("General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}),
-                ("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start})
+                ("General Use", self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}),
+                ("[AI] General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}),
+                ("[AI] General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}),
+                ("[AI] Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}),
             ],
         ];
         if !self.start {
@@ -410,24 +410,23 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
     //image = image.grayscale();
     let image_information = calculate_average_brightness(&image.to_rgba8());
     println!("Brightness of image is: {:.3}", image_information.brightness.average);
-    let model_path = options.model.to_struct().path;
-    let environment = Environment::builder()
-    .with_name("background_removal")
-    .with_log_level(onnxruntime::LoggingLevel::Warning)
-    .build().unwrap();
 
-    let session = 
-        environment
-        .new_session_builder().unwrap()
-        .with_optimization_level(GraphOptimizationLevel::Basic).unwrap()
-        .with_model_from_file(model_path).unwrap()
-    ;
     
-
     if options.erase_most_present_color {
 
         if options.model != Models::Algorithm {
-            // Remove background
+            // load model
+            let model_path = options.model.to_struct().path;
+            let environment = Environment::builder()
+            .with_name("background_removal")
+            .with_log_level(onnxruntime::LoggingLevel::Warning)
+            .build().unwrap();
+        
+            let session = environment
+                .new_session_builder().unwrap()
+                .with_optimization_level(GraphOptimizationLevel::Basic).unwrap()
+                .with_model_from_file(model_path).unwrap();
+            // Remove background with AI
             let segmented_image = remove_background(session, image, &options);
             image = segmented_image.clone();
         } else {
