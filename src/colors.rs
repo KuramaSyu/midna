@@ -448,12 +448,9 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
     let mut image = _image.clone();
     println!("{:?}", image.dimensions());
     //image = image.grayscale();
-    let image_information = calculate_average_brightness(&image.to_rgba8());
-    println!("Brightness of image is: {:.3}", image_information.brightness.average);
+    println!("Brightness of image is: {:.3}", info.brightness.average);
 
-    
     if options.erase_most_present_color {
-
         if options.model != Models::Algorithm {
             // load model
             let model_path = options.model.to_struct().path;
