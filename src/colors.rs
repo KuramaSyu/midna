@@ -452,7 +452,8 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
 
     if options.erase_most_present_color {
         if options.model != Models::Algorithm {
-            // load model
+            // Remove background with AI
+            // load AI model
             let model_path = options.model.to_struct().path;
             let environment = Environment::builder()
             .with_name("background_removal")
@@ -463,17 +464,16 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
                 .new_session_builder().unwrap()
                 .with_optimization_level(GraphOptimizationLevel::Basic).unwrap()
                 .with_model_from_file(model_path).unwrap();
-            // Remove background with AI
-            // start time
+            
             let start = std::time::Instant::now();
             let segmented_image = remove_background(session, image, &options);
             println!("[Total] Time taken: {:.3} seconds", start.elapsed().as_secs_f32());
-            image = segmented_image.clone();
+            image = segmented_image;
         } else {
             //Remove most present color if above threshold
             let mut mod_image = image.to_rgba8();
-            let (most_present_color, percentage) = get_most_present_colors(&mut mod_image);
-            println!("Most present color: {:?} with percentage {:.3}", most_present_color, percentage);
+            let (most_present_color_tuple, percentage) = (info.color_map.most_present_color, info.color_map.most_present_color_percentage);
+            let most_present_color = RgbColor {r: most_present_color_tuple.0, g: most_present_color_tuple.1, b: most_present_color_tuple.2};
             if percentage >= options.erase_when_percentage {
                 // there is actually a color to remove -> remove it
                 remove_most_present_colors(&mut mod_image, most_present_color, 40.);
@@ -487,29 +487,24 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
     if options.invert {
         image.invert();
     }
-
-    // Define RGB values in the range 0-255
-    let tint_r = 46;
-    let tint_g = 52;
-    let tint_b = 64;
-
-    //image = image.adjust_contrast(-4.5);
-    //image = image.blur(0.2);
-    //image = image.adjust_contrast(5.);
     let mut mod_image = image.to_rgba8();
     if options.sepia {
         apply_sepia(&mut mod_image);
     }
-    image = DynamicImage::from(mod_image);
-    image = image.huerotate(options.hue_rotate as i32);
-
+    if options.hue_rotate != 0.0 {
+        mod_image = DynamicImage::from(mod_image)
+            .huerotate(options.hue_rotate as i32)
+            .to_rgba8();
+    }
     if options.nord {
-        mod_image = image.to_rgba8();
         apply_nord_filter(&mut mod_image, &options);
+    }
+    if options.sepia || options.hue_rotate != 0.0 || options.nord {
         DynamicImage::from(mod_image)
     } else {
         image
     }
+    
 }
 
 
