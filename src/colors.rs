@@ -270,11 +270,11 @@ impl NordOptions {
         self_no_start.start = false;
 
         let is_erase_active = |x: &Self| {
-            x.erase_most_present_color && x.model != Models::Algorithm
+            x.erase_most_present_color
         };
 
         let is_model_enabled = |x: &Self| {
-            x.model != Models::Algorithm && x.erase_most_present_color
+            x.erase_most_present_color
         };
 
         // make option lists, so that the clicked button is inverted
@@ -290,23 +290,18 @@ impl NordOptions {
             ],
             vec![
                 ("Erase Background", self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start}, true),
-                ("General Use", self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}, is_model_enabled(self)),
-                ("[AI] General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}, is_model_enabled(self)),
-                ("[AI] General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
-                ("[AI] Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}, is_model_enabled(self)),
+                ("Dominant Color", self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}, is_model_enabled(self)),
+                ("General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}, is_model_enabled(self)),
+                ("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
+                ("Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}, is_model_enabled(self)),
             ],
         ];
         let mut optional_components: Vec<(&str, bool, NordOptions, bool)> = vec![];
-        if !self.start {
-            optional_components.push(
-                ("Start", self.start, NordOptions {start: !self.start, ..self_no_start}, true),
-            )
-        }
-        if is_erase_active(&self) {
-            optional_components.push(
-                (self.activation_function.as_str(), true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self)),
-            )
-        }
+
+        optional_components.push(
+            (self.activation_function.as_str(), true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self)),
+        );
+
         option_2d_list.push(optional_components);
 
         let mut name_to_color_map = HashMap::<&str, ButtonStyle>::new();
@@ -318,7 +313,7 @@ impl NordOptions {
             }
             let mut action_row = Vec::<CreateButton>::new();
             for (label, enabled, option, is_enabled) in option_list {
-                println!("CustomID: {} Label: {}", option.make_nord_custom_id(&message_id, update), label);
+                //println!("CustomID: {} Label: {}", option.make_nord_custom_id(&message_id, update), label);
                 action_row.push(
                     CreateButton::new(option.make_nord_custom_id(&message_id, update))
                         .label(&format!("{}", label))
@@ -336,23 +331,34 @@ impl NordOptions {
         for action_row in action_rows {
             components.push(CreateActionRow::Buttons(action_row));
         }
-        components.push(
-            CreateActionRow::Buttons(
-                vec![
-                    CreateButton::new(format!("delete-{}", message_id))
-                        .style(ButtonStyle::Secondary)
-                        .label("Dispose of the old!")
-                        .emoji("🗑️".parse::<ReactionType>().unwrap()),
-                    // stop button
-                    CreateButton::new(format!("stop-{}", message_id))
-                        .style(ButtonStyle::Secondary)
-                        .label("Dispose of this"),
-                    CreateButton::new(format!("clear-{}", message_id))
-                        .style(ButtonStyle::Secondary)
-                        .label("Keep both")
-                ]
-            )
-        );
+        let mut last_row: Vec<CreateButton> = vec![
+            CreateButton::new(format!("delete-{}", message_id))
+                .style(ButtonStyle::Secondary)
+                .label("Dispose of the old!")
+                .emoji("🗑️".parse::<ReactionType>().unwrap()),
+            // stop button
+            CreateButton::new(format!("stop-{}", message_id))
+                .style(ButtonStyle::Secondary)
+                .label("Dispose of this")
+                .emoji("🗑️".parse::<ReactionType>().unwrap()),
+            CreateButton::new(format!("clear-{}", message_id))
+                .style(ButtonStyle::Secondary)
+                .label("Keep both")
+        ];
+        // add start button
+        if !self.start {
+            last_row.insert(0,
+                CreateButton::new(
+                    NordOptions {start: !self.start, ..self_no_start}
+                        .make_nord_custom_id(&message_id, update)
+                )
+                .style(ButtonStyle::Primary)
+                .label("Start")
+                .emoji("▶️".parse::<ReactionType>().unwrap())
+            );
+        }
+        components.push(CreateActionRow::Buttons(last_row));
+
         components
     }
 }
@@ -501,7 +507,10 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
                 .with_optimization_level(GraphOptimizationLevel::Basic).unwrap()
                 .with_model_from_file(model_path).unwrap();
             // Remove background with AI
+            // start time
+            let start = std::time::Instant::now();
             let segmented_image = remove_background(session, image, &options);
+            println!("[Total] Time taken: {:.3} seconds", start.elapsed().as_secs_f32());
             image = segmented_image.clone();
         } else {
             //Remove most present color if above threshold
@@ -954,53 +963,36 @@ fn apply_mask(
     // choose activation function
     let mut activation_function: fn(u8) -> u8 = |x| x;
     let sigmoid = |x: u8| -> u8 {
+        if x < 5 { return 0 } else if x > 250 { return 255 }
         let x = x as f32 / 255.0; // Normalize to range [0, 1]
-        let offset_frac = 1./75.;
-        let sigmoid_value = (255.0 * (
-            (1.0 + offset_frac) / ( 1.0+(( (x-0.5) / -0.1 ).exp()) )
-            - offset_frac/2.
-        )).min(255.).max(0.);
+        let sigmoid_value = 255.0 * (
+            (1.0) / ( 1.0+(( (x-0.5) / -0.1 ).exp()) )
+        );
         sigmoid_value as u8
     };
-    let mut x_range = (u8::MAX, u8::MIN);
-    let mut x2_range = (u8::MAX, u8::MIN);
+
     if options.activation_function == ActivationFunction::Sigmoid {
         activation_function = sigmoid;
     }
-
-
     for (x, y, pixel) in masked_image.enumerate_pixels_mut() {
         let pixel_value = image.get_pixel(x, y);
         let mask_value = resized_mask.get_pixel(x, y)[0];
         // // Extract the original pixel's RGBA values
-        let [r, g, b, a] = pixel_value.0;
+        let [r, g, b, _a] = pixel_value.0;
 
-        // Modify alpha channel based on mask value
-        // let alpha = if mask_value > 170 { a } else { mask_value / 170 * 255 }; // Set transparency if mask_value <= 127
-        
-        let alpha = activation_function(mask_value);
-        if mask_value< x_range.0 {
-            x_range.0 = mask_value;
-        }
-        if mask_value > x_range.1 {
-            x_range.1 = mask_value;
-        }
-        if alpha < x2_range.0 {
-            x2_range.0 = alpha;
-        }
-        if alpha > x2_range.1 {
-            x2_range.1 = alpha;
-        }
-        *pixel = image::Rgba([r, g, b, alpha]);
+        *pixel = image::Rgba([r, g, b, activation_function(mask_value)]);
     }
-    println!("Alpha range: {:?} ", x_range);
-    println!("Alpha2 range: {:?} ", x2_range);
     DynamicImage::ImageRgba8(masked_image)
 }
 
 
 pub fn remove_background<'a>(mut session: Session<'_>, image: DynamicImage, options: &NordOptions) -> DynamicImage {
+    // start time
+    let start = std::time::Instant::now();
     let mask = segment_image(&mut session, &image, &options).unwrap();
+    println!("[Segmentation] Time taken: {:.3} seconds", start.elapsed().as_secs_f32());
+    let start = std::time::Instant::now();
     let segmented_image = apply_mask(&image, &mask, &options);
+    println!("[Masking] Time taken: {:.3} seconds", start.elapsed().as_secs_f32());
     segmented_image
 }
