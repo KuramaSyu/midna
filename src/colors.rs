@@ -215,21 +215,6 @@ impl NordOptions {
         options
     }
 
-    pub fn default_erase() -> Self {
-        NordOptions {
-            invert: false,
-            hue_rotate: 0.0,
-            sepia: false,
-            nord: false,
-            erase_most_present_color: true, 
-            erase_when_percentage: 0.3,  // if met: all other filters are ignored
-            auto_adjust: false,
-            start: false,
-            model: Models::IsnetGeneral,
-            activation_function: ActivationFunction::Sigmoid,
-        }
-    }
-
     pub fn make_nord_custom_id(&self, message_id: &u64, update: bool) -> String {
         format!(
             "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}-{}", 
@@ -439,49 +424,48 @@ impl RgbColor {
 
 struct PolarNight {}
 impl PolarNight {
-    const a: RgbColor = RgbColor {r: 46, g: 52, b: 64};
-    const b: RgbColor = RgbColor {r: 59, g: 66, b: 82};
-    const c: RgbColor = RgbColor {r: 67, g: 76, b: 94};
-    const d: RgbColor = RgbColor {r: 76, g: 86, b: 106};
+    const A: RgbColor = RgbColor {r: 46, g: 52, b: 64};
+    const B: RgbColor = RgbColor {r: 59, g: 66, b: 82};
+    const C: RgbColor = RgbColor {r: 67, g: 76, b: 94};
+    const D: RgbColor = RgbColor {r: 76, g: 86, b: 106};
 }
 
-struct SnowStorm {}
-// impl for #d8dee9 #e5e9f0 #eceff4
-impl SnowStorm {
-    const a: RgbColor = RgbColor {r: 216, g: 222, b: 233};
-    const b: RgbColor = RgbColor {r: 229, g: 233, b: 240};
-    const c: RgbColor = RgbColor {r: 236, g: 239, b: 244};
-    const d: RgbColor = RgbColor {r: 236, g: 239, b: 244};
-}
+// struct SnowStorm {}
+// impl SnowStorm {
+//     const A: RgbColor = RgbColor {r: 216, g: 222, b: 233};
+//     const B: RgbColor = RgbColor {r: 229, g: 233, b: 240};
+//     const C: RgbColor = RgbColor {r: 236, g: 239, b: 244};
+//     const D: RgbColor = RgbColor {r: 236, g: 239, b: 244};
+// }
 
 struct Frost {}
 // impl for #8fbcbb #88c0d0 #81a1c1 #5e81ac
 impl Frost {
-    const a: RgbColor = RgbColor {r: 143, g: 188, b: 187};
-    const b: RgbColor = RgbColor {r: 136, g: 192, b: 208};
-    const c: RgbColor = RgbColor {r: 129, g: 161, b: 193};
-    const d: RgbColor = RgbColor {r: 94, g: 129, b: 172};
+    const A: RgbColor = RgbColor {r: 143, g: 188, b: 187};
+    const B: RgbColor = RgbColor {r: 136, g: 192, b: 208};
+    const C: RgbColor = RgbColor {r: 129, g: 161, b: 193};
+    const D: RgbColor = RgbColor {r: 94, g: 129, b: 172};
 }
 
-struct Nord {
-    pub polar_night: PolarNight,
-    pub snow_storm: SnowStorm,
-    pub frost: Frost,
-}
+// struct _Nord {
+//     pub polar_night: PolarNight,
+//     pub snow_storm: SnowStorm,
+//     pub frost: Frost,
+// }
 
-impl Nord {
-    const polar_night: PolarNight = PolarNight {};
-    const snow_storm: SnowStorm = SnowStorm {};
-    const frost: Frost = Frost {};
+// impl _Nord {
+//     const POLAR_NIGHT: PolarNight = PolarNight {};
+//     const SNOW_STORM: SnowStorm = SnowStorm {};
+//     const FROST: Frost = Frost {};
 
-    fn new() -> Self {
-        Nord {
-            polar_night: PolarNight {},
-            snow_storm: SnowStorm {},
-            frost: Frost {},
-        }
-    }
-}
+//     fn new() -> Self {
+//         _Nord {
+//             polar_night: PolarNight {},
+//             snow_storm: SnowStorm {},
+//             frost: Frost {},
+//         }
+//     }
+// }
 
 
 pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageInformation) -> DynamicImage {
@@ -627,11 +611,11 @@ pub fn apply_nord_filter(image: &mut RgbaImage, options: &NordOptions) {
     let max_brightness = if options.erase_most_present_color {1.} else {0.85};
 
     let contrast_colors = vec![
-        PolarNight::a, PolarNight::b, PolarNight::c, PolarNight::d,
+        PolarNight::A, PolarNight::B, PolarNight::C, PolarNight::D,
     ];
 
     let colorful_colors = vec![
-        Frost::a, Frost::b, Frost::c, Frost::d,
+        Frost::A, Frost::B, Frost::C, Frost::D,
     ];
 
     for color in &contrast_colors {
