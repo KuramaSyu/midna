@@ -1,20 +1,12 @@
-use image::{DynamicImage, GenericImageView, ImageResult, ImageBuffer, RgbaImage, Rgb, Rgba, Pixel};
+use image::{DynamicImage, GenericImageView, ImageResult, RgbaImage, Rgb, Rgba};
 use imageproc::filter::gaussian_blur_f32;
 use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
-use serenity::model;
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::vec;
-use std::{borrow::BorrowMut, io::Cursor};
-use env_logger::{Builder, Env};
-use log::{info, warn, debug, Level::Debug, set_max_level};
 use image::io::Reader as ImageReader;
 use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTensor, GraphOptimizationLevel};
-use std::error::Error;
-use tokio::task;
 use ndarray;
-use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Clone, Debug)]
 pub enum ImageType {
