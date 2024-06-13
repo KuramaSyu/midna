@@ -142,47 +142,24 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
         if message.is_none() {
             message = Some(fetch_or_raise_message(&ctx, &interaction, message_id).await);
         }
-        
-        if update {
-            // first ack, that existing image is being kept
-            let response = CreateInteractionResponse::Acknowledge;
-            interaction.create_response(&ctx, response).await?;
-            // edit response with new components
-            let response = EditInteractionResponse::new()
-                .attachments(EditAttachments::keep_all(&interaction.message))
-                .content("⌛ I'm working on it. Please wait a moment.")
-                .components(new_components.clone());
-            interaction.edit_response(&ctx, response).await.unwrap();
-        } else {
-            // create response with new components
-            let response = CreateInteractionResponse::UpdateMessage(
-                CreateInteractionResponseMessage::new()
-                .content("⌛ I'm working on it. Please wait a moment.")
-                .components(new_components.clone())
-            );
-            interaction.create_response(&ctx, response).await.unwrap();
-        }
+        let response = CreateInteractionResponse::Acknowledge;
+        interaction.create_response(&ctx, response).await?;
+        // edit response with new components
+        let response = EditInteractionResponse::new()
+            .attachments(EditAttachments::keep_all(&interaction.message))
+            .content("⌛ I'm working on it. Please wait a moment.")
+            .components(new_components.clone());
+        interaction.edit_response(&ctx, response).await.unwrap();
     } else {
-        // start not pressed
-        if update {
-            // first ack, that existing image is being kept
-            let response = CreateInteractionResponse::Acknowledge;
-            interaction.create_response(&ctx, response).await?;
-            // edit response with new components
-            let response = EditInteractionResponse::new()
-                .attachments(EditAttachments::keep_all(&interaction.message))
-                .content("⌛ I change the options. Please wait a moment.")
-                .components(new_components.clone());
-            interaction.edit_response(&ctx, response).await.unwrap();
-        } else {
-            // create response with new components
-            let response = CreateInteractionResponse::UpdateMessage(
-                CreateInteractionResponseMessage::new()
-                .content("⌛ I change the options. Please wait a moment.")
-                .components(new_components.clone())
-            );
-            interaction.create_response(&ctx, response).await.unwrap();
-        }
+        // first ack, that existing image is being kept
+        let response = CreateInteractionResponse::Acknowledge;
+        interaction.create_response(&ctx, response).await?;
+        // edit response with new components
+        let response = EditInteractionResponse::new()
+            .attachments(EditAttachments::keep_all(&interaction.message))
+            .content("⌛ I change the options. Please wait a moment.")
+            .components(new_components.clone());
+        interaction.edit_response(&ctx, response).await.unwrap();
     }
     
     if !options.start {
