@@ -388,7 +388,7 @@ async fn image_check(attachment: &Attachment) -> Result<()> {
     Ok(())
 }
 
-async fn ask_user_to_darken_image(_ctx: &SContext, message: &Message, attachment: &Attachment, data: &Data) -> Result<(), anyhow::Error> {
+async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment: &Attachment, data: &Data) -> Result<(), anyhow::Error> {
     image_check(attachment).await?;
     let url = attachment.url.clone();
     let image_and_info: Result<(DynamicImage, ImageInformation), _> = {
@@ -410,7 +410,7 @@ async fn ask_user_to_darken_image(_ctx: &SContext, message: &Message, attachment
     if bright < 0.4 {
         bail!("Not bright enough: {bright}")
     }
-    let _response = CreateMessage::new()
+    let response = CreateMessage::new()
         .content(format!("Bruhh...\n\nThis looks bright as fuck. On a scale from 1 to 9 it's a {:.1}.\nMay I darken it?", bright*9.))
         .button(CreateButton::new(NordOptions::new().make_nord_custom_id(&message.id.into(), false))
             .style(ButtonStyle::Primary)
@@ -420,7 +420,7 @@ async fn ask_user_to_darken_image(_ctx: &SContext, message: &Message, attachment
             .style(ButtonStyle::Primary)
             .label("No")
         );
-    // let new_message = message.channel_id.send_message(ctx, response).await?;
+    let _new_message = message.channel_id.send_message(&ctx, response).await?;
     
     // // Spawn a new task to delete the message after 5 minutes
     // let ctx_clone = ctx.clone();
