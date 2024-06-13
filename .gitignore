@@ -27,3 +27,4 @@ Cargo.lock
 # Ignore all .env files in all directories
 **/*.env
 models/*.onnx
+test.py
