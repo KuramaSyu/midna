@@ -33,7 +33,7 @@ RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.8.1/onnxr
     && ldconfig /opt/onnxruntime/lib
 
 # Copy the compiled Rust binary to the final image
-COPY --from=builder /usr/src/app/target/release/image2nord /usr/local/bin/
+COPY --from=builder /usr/src/app/target/release/image2nord ./image2nord
 
 # Command to run the application
-CMD ["image2nord"]
+CMD ["./image2nord"]
