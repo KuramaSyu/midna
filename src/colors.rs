@@ -887,8 +887,8 @@ fn get_image_information(image: &RgbaImage) -> ImageInformation {
     };
     // predict image type
     if 
-        image_information.grayscale_similarity.average < 0.001 
-        && image_information.color_map.most_present_color_percentage > 0.1
+        image_information.color_map.amount < 2000 // avg < 500
+        && image_information.color_map.most_present_color_percentage > 0.1 // mostly white
     {
         image_information.image_type = Some(ImageType::Cartoon);
     } else {
