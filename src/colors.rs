@@ -318,7 +318,7 @@ impl NordOptions {
                     NordOptions {start: !self.start, ..self_no_start}
                         .make_nord_custom_id(&message_id, update)
                 )
-                .style(ButtonStyle::Primary)
+                .style(ButtonStyle::Success)
                 .label("Start")
                 .emoji("▶️".parse::<ReactionType>().unwrap())
             );
