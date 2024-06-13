@@ -951,12 +951,9 @@ fn apply_mask(
     .collect();
 
     // Ensure mask dimensions match image dimensions
-    let mask_image = DynamicImage::ImageLuma8(
+    let resized_mask = DynamicImage::ImageLuma8(
         image::GrayImage::from_raw(mask_width, mask_height, mask_data).unwrap()
-    );
-
-
-    let resized_mask = mask_image.resize_exact(orig_width, orig_height, image::imageops::FilterType::Gaussian).to_luma8();
+    ).resize_exact(orig_width, orig_height, image::imageops::FilterType::Nearest).to_luma8();
 
     let mut masked_image = RgbaImage::new(orig_width, orig_height);
 
@@ -974,15 +971,22 @@ fn apply_mask(
     if options.activation_function == ActivationFunction::Sigmoid {
         activation_function = sigmoid;
     }
-    for (x, y, pixel) in masked_image.enumerate_pixels_mut() {
+    // time start
+    let start = std::time::Instant::now();
+    masked_image.chunks_exact_mut(4).enumerate().for_each(|(index, pixel)| {
+        let x = (index as u32) % orig_width;
+        let y = (index as u32) / orig_width;
         let pixel_value = image.get_pixel(x, y);
         let mask_value = resized_mask.get_pixel(x, y)[0];
-        // // Extract the original pixel's RGBA values
+        
         let [r, g, b, _a] = pixel_value.0;
+        let alpha = activation_function(mask_value);
 
-        *pixel = image::Rgba([r, g, b, activation_function(mask_value)]);
-    }
-    DynamicImage::ImageRgba8(masked_image)
+        pixel.copy_from_slice(&[r, g, b, alpha]);
+    });
+    println!("[Masking-loop] Time taken: {:.3} seconds", start.elapsed().as_secs_f32());
+    let img = DynamicImage::ImageRgba8(masked_image);
+    img
 }
 
 
