@@ -1,10 +1,9 @@
-use image::{DynamicImage, GenericImageView, ImageResult, RgbaImage, Rgb, Rgba};
+use image::{DynamicImage, GenericImageView, RgbaImage, Rgb, Rgba};
 use imageproc::filter::gaussian_blur_f32;
 use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
 use std::collections::HashMap;
 use std::vec;
-use image::io::Reader as ImageReader;
 use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTensor, GraphOptimizationLevel};
 use ndarray;
 
@@ -12,12 +11,6 @@ use ndarray;
 pub enum ImageType {
     Cartoon,
     Picture
-}
-pub fn get_image() -> ImageResult<DynamicImage> {
-    
-    let image = ImageReader::open("test.png")?.decode();
-
-    image
 }
 
 #[derive(Clone, Debug, Copy, PartialEq)]
@@ -357,7 +350,7 @@ impl RgbColor {
     }
 
     pub fn brightness(&self) -> f32 {
-        calculate_avg_pixel_brightness(self.r, self.g, self.b)
+        (0.299 * self.r as f32 + 0.587 * self.g as f32 + 0.114 * self.b as f32) / 255.0
     }
 
     pub fn calculate_grayscale_similarity(&self) -> f32 {
@@ -501,7 +494,7 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
 
 
 
-pub fn tint_image(image: &mut RgbaImage, tint: Rgb<f32>) {
+pub fn _tint_image(image: &mut RgbaImage, tint: Rgb<f32>) {
     let Rgb([tint_r, tint_g, tint_b]) = tint;
     for Rgba([r, g, b, _]) in image.pixels_mut() {
         *r = (*r as f32 * tint_r) as u8;
@@ -521,7 +514,7 @@ pub fn apply_sepia(image: &mut RgbaImage) {
     }
 }
 
-pub fn apply_tone(image: &mut RgbaImage, target_color: Rgb<f32>, blend_factor: f32) {
+pub fn _apply_tone(image: &mut RgbaImage, target_color: Rgb<f32>, blend_factor: f32) {
     let Rgb([target_r, target_g, target_b]) = target_color;
     for Rgba([r, g, b, _]) in image.pixels_mut() {
         let orig_r = *r as f32 / 255.0;
@@ -538,32 +531,9 @@ pub fn apply_tone(image: &mut RgbaImage, target_color: Rgb<f32>, blend_factor: f
 
 pub fn calculate_average_brightness(image: &RgbaImage) -> ImageInformation {
     let image_information = get_image_information(&image);
-    println!("IMAGE INFORMATION -------------\n{:?}", image_information);
+    println!("--------------- IMAGE INFORMATION -------------\n{:?}", image_information);
     image_information
-    // let (width, height) = image.dimensions();
-    // let sample_distance = (width / 50).max(10) as usize;
-    // let resized_image = DynamicImage::ImageRgba8(image.clone());
-    // // Proceed with brightness calculation
-    // let mut total_brightness = 0.0;
-    // let num_pixels = resized_image.width() * resized_image.height() / sample_distance.max(1 as usize) as u32;
-
-    // for (i, Rgba([r, g, b, _])) in resized_image.to_rgba8().pixels().enumerate() {
-    //     if i % sample_distance != 0 {
-    //         continue;
-    //     }
-    //     let brightness = calculate_avg_pixel_brightness(*r, *g, *b);
-    //     total_brightness += brightness;
-    // }
-    // total_brightness / num_pixels as f32
 }
-
-
-
-pub fn calculate_avg_pixel_brightness(r: u8, g: u8, b: u8) -> f32 {
-    (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32) / 255.0
-}
-
-
 
 pub fn apply_nord_filter(image: &mut RgbaImage, options: &NordOptions) {
     let mut smallest_grey = f32::MAX;
@@ -651,34 +621,6 @@ pub fn apply_nord_filter(image: &mut RgbaImage, options: &NordOptions) {
     println!("greyscale: {:.3} - {:.3}", smallest_grey, biggest_grey);
 }
 
-pub fn get_most_present_colors(image: &mut RgbaImage) -> (RgbColor, f64) {
-    let mut color_map: HashMap<(u8, u8, u8), u64> = HashMap::new();
-    static SAMPLES_PER_LINE: usize = 50;
-
-    for (i, Rgba([r, g, b, a])) in image.pixels_mut().enumerate() {
-        if i % SAMPLES_PER_LINE != 0 || *a <= 128 {
-            // ignore transparent pixels
-            continue;
-        }
-        let key = (*r, *g, *b);
-        color_map.entry(key).and_modify(|e| *e += 1).or_insert(1);
-    }
-    
-    let mut most_present_color = (0, 0, 0);
-    let mut total_count = 0.;
-    let mut max_count = 0.;
-    for (color, count) in color_map.iter() {
-        if *count as f64 > max_count {
-            max_count = *count as f64;
-            most_present_color = *color;
-        }
-        total_count += *count as f64;
-    }
-    println!("amount of clolors: {}", color_map.len());
-    (RgbColor { r: most_present_color.0, g: most_present_color.1, b: most_present_color.2 }, max_count / total_count)
-
-}
-
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -695,7 +637,7 @@ fn map_distance_to_transparency(distance: f32, max_distance: f32) -> u8 {
 
 pub fn remove_most_present_colors(image: &mut RgbaImage, most_present_color: RgbColor, max_distance: f32) {
     for pixel in image.pixels_mut() {
-        let Rgba([r, g, b, a]) = *pixel;
+        let Rgba([r, g, b, _a]) = *pixel;
         let rgb = (r, g, b);
         let distance = most_present_color.color_distance(rgb);
 
@@ -708,7 +650,7 @@ pub fn remove_most_present_colors(image: &mut RgbaImage, most_present_color: Rgb
     // apply_gaussian_blur_to_alpha(image, 2.0);
 }
 
-fn apply_gaussian_blur_to_alpha(image: &mut RgbaImage, sigma: f32) {
+fn _apply_gaussian_blur_to_alpha(image: &mut RgbaImage, sigma: f32) {
     let (width, height) = image.dimensions();
     let mut alpha_image = RgbaImage::new(width, height);
 
@@ -752,7 +694,7 @@ pub struct GrayScaleSimilarity {
     pub max: f32,
 }
 #[derive(Clone, Debug)]
-struct ColorMap {
+pub struct ColorMap {
     pub most_present_color: (u8, u8, u8),
     pub most_present_color_percentage: f64,
     pub amount: u64,
