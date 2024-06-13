@@ -254,10 +254,6 @@ impl NordOptions {
         let mut self_no_start = self.clone();
         self_no_start.start = false;
 
-        let is_erase_active = |x: &Self| {
-            x.erase_most_present_color
-        };
-
         let is_model_enabled = |x: &Self| {
             x.erase_most_present_color
         };
