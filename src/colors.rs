@@ -443,26 +443,6 @@ impl Frost {
     const D: RgbColor = RgbColor {r: 94, g: 129, b: 172};
 }
 
-// struct _Nord {
-//     pub polar_night: PolarNight,
-//     pub snow_storm: SnowStorm,
-//     pub frost: Frost,
-// }
-
-// impl _Nord {
-//     const POLAR_NIGHT: PolarNight = PolarNight {};
-//     const SNOW_STORM: SnowStorm = SnowStorm {};
-//     const FROST: Frost = Frost {};
-
-//     fn new() -> Self {
-//         _Nord {
-//             polar_night: PolarNight {},
-//             snow_storm: SnowStorm {},
-//             frost: Frost {},
-//         }
-//     }
-// }
-
 
 pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageInformation) -> DynamicImage {
     let mut image = _image.clone();
