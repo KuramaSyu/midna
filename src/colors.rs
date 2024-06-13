@@ -953,7 +953,9 @@ fn apply_mask(
     // Ensure mask dimensions match image dimensions
     let resized_mask = DynamicImage::ImageLuma8(
         image::GrayImage::from_raw(mask_width, mask_height, mask_data).unwrap()
-    ).resize_exact(orig_width, orig_height, image::imageops::FilterType::Nearest).to_luma8();
+    )
+        .resize_exact(orig_width, orig_height, image::imageops::FilterType::Nearest)
+        .to_luma8();
 
     let mut masked_image = RgbaImage::new(orig_width, orig_height);
 
@@ -979,9 +981,12 @@ fn apply_mask(
         let pixel_value = image.get_pixel(x, y);
         let mask_value = resized_mask.get_pixel(x, y)[0];
         
-        let [r, g, b, _a] = pixel_value.0;
+        let [r, g, b, a] = pixel_value.0;
+        if a < mask_value {
+            pixel.copy_from_slice(&[r, g, b, a]);
+            return;
+        }
         let alpha = activation_function(mask_value);
-
         pixel.copy_from_slice(&[r, g, b, alpha]);
     });
     println!("[Masking-loop] Time taken: {:.3} seconds", start.elapsed().as_secs_f32());
