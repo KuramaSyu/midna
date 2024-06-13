@@ -128,7 +128,7 @@ impl ActivationFunction {
             // ActivationFunction::Softmax
         ];
         let self_index = values.iter().position(|&x| x == *self).unwrap();
-        let next = self_index + 1 % (values.len() - 1);
+        let next = (self_index + 1) % (values.len());
         values[next]
     }
 }
@@ -955,10 +955,15 @@ fn apply_mask(
     let mut activation_function: fn(u8) -> u8 = |x| x;
     let sigmoid = |x: u8| -> u8 {
         let x = x as f32 / 255.0; // Normalize to range [0, 1]
-        let sigmoid_value = 255.0 / (1.0 + (-5.0 * (0.5 - x).exp()));
+        let offset_frac = 1./75.;
+        let sigmoid_value = (255.0 * (
+            (1.0 + offset_frac) / ( 1.0+(( (x-0.5) / -0.1 ).exp()) )
+            - offset_frac/2.
+        )).min(255.).max(0.);
         sigmoid_value as u8
     };
-
+    let mut x_range = (u8::MAX, u8::MIN);
+    let mut x2_range = (u8::MAX, u8::MIN);
     if options.activation_function == ActivationFunction::Sigmoid {
         activation_function = sigmoid;
     }
@@ -972,10 +977,24 @@ fn apply_mask(
 
         // Modify alpha channel based on mask value
         // let alpha = if mask_value > 170 { a } else { mask_value / 170 * 255 }; // Set transparency if mask_value <= 127
-
-        *pixel = image::Rgba([r, g, b, activation_function(mask_value)]);
+        
+        let alpha = activation_function(mask_value);
+        if mask_value< x_range.0 {
+            x_range.0 = mask_value;
+        }
+        if mask_value > x_range.1 {
+            x_range.1 = mask_value;
+        }
+        if alpha < x2_range.0 {
+            x2_range.0 = alpha;
+        }
+        if alpha > x2_range.1 {
+            x2_range.1 = alpha;
+        }
+        *pixel = image::Rgba([r, g, b, alpha]);
     }
-
+    println!("Alpha range: {:?} ", x_range);
+    println!("Alpha2 range: {:?} ", x2_range);
     DynamicImage::ImageRgba8(masked_image)
 }
 
