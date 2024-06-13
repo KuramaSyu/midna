@@ -1,26 +1,27 @@
 #![warn(clippy::str_to_string)]
 mod commands;
 use colors::{ImageInformation, NordOptions};
-use onnxruntime::{environment::Environment, session::Session, GraphOptimizationLevel};
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
-use ::serenity::all::{Attachment, AttachmentType, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType};
+use ::serenity::all::{
+    Attachment, ButtonStyle, ComponentInteraction, 
+    CreateAttachment, CreateButton, CreateInteractionResponse, 
+    CreateInteractionResponseFollowup, CreateInteractionResponseMessage, 
+    CreateMessage, EditAttachments, EditInteractionResponse, Interaction, 
+    Message, ReactionType
+};
 use std::{
-    collections::HashMap, env, fmt, io::Cursor, sync::{Arc, Mutex}, time::Duration
+    collections::HashMap, env, io::Cursor, sync::{Arc, Mutex}, time::Duration
 };
 use anyhow::{bail, Result};
-use thiserror::Error;
 use reqwest;
-use image::{codecs::png::{CompressionType, FilterType, PngEncoder}, load_from_memory, DynamicImage, ImageEncoder, ImageFormat};
-use tokio::{io::AsyncWriteExt, runtime::Runtime, time::sleep};
+use image::{codecs::png::{CompressionType, FilterType, PngEncoder}, DynamicImage, ImageEncoder};
 
 // Types used by all command functions
 type AsyncError = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, AsyncError>;
 type SContext = serenity::Context;
-use log::{info, warn, debug, Level::Debug, set_max_level};
-use failure::{Backtrace, Fail};
-use std::str::FromStr;
+use log::{info, warn};
 use ttl_cache::TtlCache;
 
 mod colors;
@@ -127,7 +128,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     if options.auto_adjust {
         message = Some(fetch_or_raise_message(&ctx, &interaction, message_id).await);
         let ref unwrapped = message.as_ref().unwrap();
-        let (image, information) = fetch_image(unwrapped.attachments.first().unwrap(), &unwrapped, ctx, data, &options).await;
+        let (_image, information) = fetch_image(unwrapped.attachments.first().unwrap(), data).await;
         let new_options = NordOptions::from_image_information(&information);
         options = NordOptions {start: options.start, ..new_options};
     }
@@ -203,7 +204,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     // process image
     for attachment in &message.attachments {
         println!("Processing attachment");
-        let image = process_image(&attachment, &message, ctx, data, options.clone()).await.unwrap();
+        let image = process_image(&attachment, data, options.clone()).await.unwrap();
         println!("writing image to buffer");
         let mut buffer = Vec::new();
             // Create a PNG encoder with a specific compression level
@@ -240,7 +241,6 @@ async fn initial_clear_components(ctx: &SContext, interaction: &ComponentInterac
 }
 
 async fn handle_dispose(ctx: &SContext, interaction: &ComponentInteraction, message_id: u64) -> Result<()> {
-    let content = &interaction.data.custom_id;
     initial_clear_components(&ctx, &interaction).await?;
     // fetch message
     interaction.channel_id.delete_message(&ctx, message_id).await?;
@@ -388,7 +388,7 @@ async fn image_check(attachment: &Attachment) -> Result<()> {
     Ok(())
 }
 
-async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment: &Attachment, data: &Data) -> Result<(), anyhow::Error> {
+async fn ask_user_to_darken_image(_ctx: &SContext, message: &Message, attachment: &Attachment, data: &Data) -> Result<(), anyhow::Error> {
     image_check(attachment).await?;
     let url = attachment.url.clone();
     let image_and_info: Result<(DynamicImage, ImageInformation), _> = {
@@ -410,7 +410,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
     if bright < 0.4 {
         bail!("Not bright enough: {bright}")
     }
-    let response = CreateMessage::new()
+    let _response = CreateMessage::new()
         .content(format!("Bruhh...\n\nThis looks bright as fuck. On a scale from 1 to 9 it's a {:.1}.\nMay I darken it?", bright*9.))
         .button(CreateButton::new(NordOptions::new().make_nord_custom_id(&message.id.into(), false))
             .style(ButtonStyle::Primary)
@@ -420,12 +420,12 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
             .style(ButtonStyle::Primary)
             .label("No")
         );
-    let new_message = message.channel_id.send_message(ctx, response).await?;
+    // let new_message = message.channel_id.send_message(ctx, response).await?;
     
-    // Spawn a new task to delete the message after 5 minutes
-    let ctx_clone = ctx.clone();
-    let channel_id = message.channel_id;
-    let message_id = message.id;
+    // // Spawn a new task to delete the message after 5 minutes
+    // let ctx_clone = ctx.clone();
+    // let channel_id = message.channel_id;
+    // let message_id = message.id;
 
     // tokio::spawn(async move {
     //     sleep(Duration::from_secs(300)).await;
@@ -438,10 +438,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
 }
 async fn fetch_image(
     attachment: &serenity::Attachment, 
-    msg: &Message, 
-    ctx: &SContext, 
     data: &Data, 
-    options: &colors::NordOptions
 ) -> (DynamicImage, ImageInformation) {
     image_check(attachment).await.unwrap();
     let url = attachment.url.clone();
@@ -460,8 +457,8 @@ async fn fetch_image(
 }
 
 
-async fn process_image(attachment: &serenity::Attachment, msg: &Message, ctx: &SContext, data: &Data, options: colors::NordOptions) -> Result<DynamicImage> {
-    let (image, info) = fetch_image(attachment, msg, ctx, data, &options).await;
+async fn process_image(attachment: &serenity::Attachment, data: &Data, options: colors::NordOptions) -> Result<DynamicImage> {
+    let (image, info) = fetch_image(attachment, data).await;
     Ok(colors::apply_nord(image, options, &info))
 }
 
