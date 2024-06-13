@@ -9,13 +9,11 @@ edition = "2021"
 anyhow = "1.0.86"
 dotenv = "0.15.0"
 env_logger = "0.11.3"
-failure = "0.1.8"
 image = "0.25.1"
 imageproc = "0.25.0"
 log = "0.4.21"
 poise = "0.6.1"
 reqwest = { version = "0.11", features = ["json"] }
-thiserror = "1.0.61"
 tokio = { version = "1.0", features = ["full"] }
 ttl_cache = "0.5.1"
 onnxruntime = "0.0.14"
