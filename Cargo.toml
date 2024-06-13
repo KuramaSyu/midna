@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.86"
 dotenv = "0.15.0"
-env_logger = "0.11.3"
 image = "0.25.1"
 imageproc = "0.25.0"
 log = "0.4.21"

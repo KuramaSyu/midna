@@ -122,7 +122,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     let content = &interaction.data.custom_id;
     let mut options = NordOptions::from_custom_id(&content);
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
-    let update = content.split("-").nth(1).unwrap().parse::<bool>().unwrap_or(true);
+    let _update = content.split("-").nth(1).unwrap().parse::<bool>().unwrap_or(true);
 
     let mut message: Option<Message> = None;
     if options.auto_adjust {
@@ -233,7 +233,7 @@ async fn handle_dispose(ctx: &SContext, interaction: &ComponentInteraction, mess
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    // env_logger::init();
     dotenv().ok();
     // FrameworkOptions contains all of poise's configuration option in one struct
     // Every option can be omitted to use its default value
