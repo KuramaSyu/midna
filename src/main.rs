@@ -4,11 +4,7 @@ use colors::{ImageInformation, NordOptions};
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
 use ::serenity::all::{
-    Attachment, ButtonStyle, ComponentInteraction, 
-    CreateAttachment, CreateButton, CreateInteractionResponse, 
-    CreateInteractionResponseFollowup, CreateInteractionResponseMessage, 
-    CreateMessage, EditAttachments, EditInteractionResponse, Interaction, 
-    Message, ReactionType
+    Attachment, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType
 };
 use std::{
     collections::HashMap, env, io::Cursor, sync::{Arc, Mutex}, time::Duration
@@ -179,6 +175,26 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     }
     let message = message.unwrap();
     // process image
+    let buffer = match process_attachments(&message, &data, &options).await {
+        Ok(buffer) => buffer,
+        Err(e) => {
+            interaction.edit_response(&ctx, EditInteractionResponse::default().content(e.to_string())).await?;
+            return Ok(())
+        }
+    };
+    let attachment = CreateAttachment::bytes(buffer, "image.png");
+    let content = EditInteractionResponse::new()
+        .new_attachment(attachment)
+        .content("Here it is! May I delete your shiny one?")
+        .components(new_components.clone())
+    ;
+    // stone emoji: 
+    println!("sending message");
+    interaction.edit_response(&ctx, content).await?;
+    Ok(())
+}
+
+pub async fn process_attachments(message: &Message, data: &Data, options: &NordOptions) -> Result<Vec<u8>, AsyncError>{
     for attachment in &message.attachments {
         println!("Processing attachment");
         let image = process_image(&attachment, data, options.clone()).await.unwrap();
@@ -187,24 +203,13 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
             // Create a PNG encoder with a specific compression level
         {
             let mut cursor = Cursor::new(&mut buffer);
-            let encoder = PngEncoder::new_with_quality(&mut cursor, CompressionType::Best, FilterType::NoFilter);
+            let encoder = PngEncoder::new_with_quality(&mut cursor, CompressionType::Fast, FilterType::Adaptive);
             encoder.write_image(&image.as_bytes(), image.width(), image.height(), image::ExtendedColorType::Rgba8).unwrap();
         }
-        
-        let attachment = CreateAttachment::bytes(buffer, "image.png");
-        let content = EditInteractionResponse::new()
-            .new_attachment(attachment)
-            .content("Here it is! May I delete your shiny one?")
-            .components(new_components.clone())
-        ;
-        // stone emoji: 
-        println!("sending message");
-        interaction.edit_response(&ctx, content).await?;
+        return Ok(buffer);
     }
-    Ok(())
+    panic!("No attachment found in message");
 }
-
-
 async fn initial_clear_components(ctx: &SContext, interaction: &ComponentInteraction) -> Result<()> {
     // fetch message
     let response = CreateInteractionResponse::Acknowledge;
@@ -239,15 +244,15 @@ async fn main() {
     // Every option can be omitted to use its default value
     let image_cache = Arc::new(ImageCache::new());
     let options = poise::FrameworkOptions {
-        commands: vec![commands::help(), commands::vote(), commands::getvotes()],
+        commands: vec![commands::edit_message_image(), commands::help()],
         prefix_options: poise::PrefixFrameworkOptions {
             prefix: Some("~".into()),
             edit_tracker: Some(Arc::new(poise::EditTracker::for_timespan(
                 Duration::from_secs(3600),
             ))),
             additional_prefixes: vec![
-                poise::Prefix::Literal("hey bot"),
-                poise::Prefix::Literal("hey bot,"),
+                poise::Prefix::Literal("nanachi"),
+                poise::Prefix::Literal("nanachi,"),
             ],
             ..Default::default()
         },
@@ -365,21 +370,29 @@ async fn image_check(attachment: &Attachment) -> Result<()> {
     Ok(())
 }
 
-async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment: &Attachment, data: &Data) -> Result<(), anyhow::Error> {
+
+pub async fn fetch_image_and_info(attachment: &Attachment, data: &Data) -> Result<(DynamicImage, ImageInformation)> {
     image_check(attachment).await?;
     let url = attachment.url.clone();
-    let image_and_info: Result<(DynamicImage, ImageInformation), _> = {
+    let image_and_info = {
         let image = data.image_cache.get(&url).await;
         if image.is_none() {
-            let image: DynamicImage = download_image(&attachment).await?;
+            let image = download_image(&attachment).await?;
             Ok::<(DynamicImage, ImageInformation), anyhow::Error>(
                 (image.clone(), colors::calculate_average_brightness(&image.to_rgba8()))
             )
         } else {
-            let image = image.unwrap();
-            Ok(image)
+            Ok(image.unwrap())
         }
     };
+    image_and_info
+}
+
+
+async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment: &Attachment, data: &Data) -> Result<(), anyhow::Error> {
+    image_check(attachment).await?;
+    let url = attachment.url.clone();
+    let image_and_info = fetch_image_and_info(attachment, data).await;
     let (image, info) = image_and_info.expect("Image or info is none in ask_user_to_darken_image");
     println!("inserting");
     data.image_cache.insert(url, (image.clone(), info.clone())).await;
