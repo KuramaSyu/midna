@@ -20,6 +20,7 @@ type SContext = serenity::Context;
 use log::{info, warn};
 use ttl_cache::TtlCache;
 
+mod config;
 mod colors;
 
 // Custom user data passed to all command functions
