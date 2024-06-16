@@ -23,6 +23,7 @@ use ttl_cache::TtlCache;
 
 mod config;
 mod colors;
+mod tickbox;
 
 // Custom user data passed to all command functions
 
