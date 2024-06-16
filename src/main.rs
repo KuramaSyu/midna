@@ -403,7 +403,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
     println!("inserting");
     data.image_cache.insert(url, (image.clone(), info.clone())).await;
     let bright = info.brightness.average;
-    if bright < data.config.treshold.brightness {
+    if bright < data.config.threshold.brightness {
         bail!("Not bright enough: {bright}")
     }
     let response = CreateMessage::new()
