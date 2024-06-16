@@ -4,7 +4,7 @@ use toml;
 
 #[derive(Deserialize, Serialize)]
 pub struct Config {
-    pub treshold: ThresholdConfig,
+    pub threshold: ThresholdConfig,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -14,6 +14,8 @@ pub struct ThresholdConfig {
 
 pub fn load_config() -> Config {
     // Include the contents of config.toml at compile time
+    // pwd:
+    //let pwd = format!("{}/config.toml", std::env::current_dir().unwrap().to_str().unwrap());
     let config_str = include_str!("../config.toml");
     
     // Parse the config string into a Toml value or a specific config struct
