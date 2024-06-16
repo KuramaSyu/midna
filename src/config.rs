@@ -10,6 +10,7 @@ pub struct Config {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ThresholdConfig {
     pub brightness: f32,
+    pub modelpath: String,
 }
 
 pub fn load_config() -> Config {
