@@ -1,7 +1,7 @@
 use poise::{CreateReply, ReplyHandle};
 use serenity::all::{CreateAttachment, Message, User};
 
-use crate::{colors::NordOptions, fetch_image_and_info, process_attachments, AsyncError, Context};
+use crate::{colors::NordOptions, fetch_image_and_info, process_attachments, tickbox::TickBox, AsyncError, Context};
 
 /// Show this help menu
 #[poise::command(prefix_command, track_edits, slash_command)]
@@ -23,24 +23,31 @@ pub async fn help(
     Ok(())
 }
 
+
+
 #[poise::command(context_menu_command = "Edit Image", slash_command)]
 pub async fn edit_message_image(
     ctx: Context<'_>,
     #[description = "test"] message: Message,
 ) -> Result<(), AsyncError>{
-    let reply = ctx.reply("Building ...").await?;
+    let mut tickbox: TickBox = TickBox::new(vec!["Building", "Downloading", "Processing", "Uploading"]);
+    tickbox.toggle("Building", 1);
+    let reply = ctx.reply(&tickbox.to_string()).await?;
     if message.attachments.len() == 0 {
         reply.edit(ctx, CreateReply::default().content("No image found")).await?;
         return Ok(());
     }
-    reply.edit(ctx, CreateReply::default().content("Downloading image ...")).await?;
+    tickbox.next();
+    reply.edit(ctx, CreateReply::default().content(&tickbox.to_string())).await?;
     let first_attachment = message.attachments.first().unwrap();
     let (_image, info) = fetch_image_and_info(&first_attachment, ctx.data()).await?;
-    reply.edit(ctx, CreateReply::default().content("Processing image ...")).await?;
+    tickbox.next();
+    reply.edit(ctx, CreateReply::default().content(&tickbox.to_string())).await?;
     let mut options = NordOptions::from_image_information(&info);
     options.start = true;
     let buffer = process_attachments(&message, ctx.data(), &options).await?;
-    reply.edit(ctx, CreateReply::default().content("Uploading image ...")).await?;
+    tickbox.next();
+    reply.edit(ctx, CreateReply::default().content(&tickbox.to_string())).await?;
     ctx.send(
         CreateReply::default()
             .attachment(CreateAttachment::bytes(buffer, &first_attachment.filename))
