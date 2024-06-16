@@ -18,7 +18,7 @@ ttl_cache = "0.5.1"
 onnxruntime = "0.0.14"
 ndarray = "0.15.1"
 toml = "0.8.14"
-serde = "1.0.203"
+serde = "1.0"
 
 [dependencies.serenity]
 default-features = true
