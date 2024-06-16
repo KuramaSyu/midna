@@ -1,2 +1,3 @@
 [threshold]
 brightness = 0.55
+modelpath = "/app/models"
