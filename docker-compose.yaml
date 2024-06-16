@@ -6,6 +6,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-    #- .:/usr/src/app
-      - ../data/models:/usr/local/bin/models
+      #- .:/usr/local/bin
+      - ../data/models:/app/models
     command: ["image2nord"]
