@@ -4,12 +4,12 @@ use toml;
 
 #[derive(Deserialize, Serialize)]
 pub struct Config {
-    pub TRESHOLD: ThresholdConfig,
+    pub treshold: ThresholdConfig,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ThresholdConfig {
-    pub BRIGHTNESS: f32,
+    pub brightness: f32,
 }
 
 pub fn load_config() -> Config {
