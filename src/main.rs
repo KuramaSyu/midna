@@ -1,6 +1,7 @@
 #![warn(clippy::str_to_string)]
 mod commands;
 use colors::{ImageInformation, NordOptions};
+use config::Config;
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
 use ::serenity::all::{
@@ -58,6 +59,8 @@ impl ImageCache {
 pub struct Data {
     votes: Mutex<HashMap<String, u32>>,
     image_cache: Arc<ImageCache>,
+    config: Config,
+    
 }
 
 async fn on_error(error: poise::FrameworkError<'_, Data, AsyncError>) {
@@ -297,6 +300,7 @@ async fn main() {
                 Ok(Data {
                     votes: Mutex::new(HashMap::new()),
                     image_cache: image_cache,
+                    config: config::load_config(),
                 })
             })
         })
@@ -398,11 +402,11 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
     println!("inserting");
     data.image_cache.insert(url, (image.clone(), info.clone())).await;
     let bright = info.brightness.average;
-    if bright < 0.4 {
+    if bright < data.config.treshold.brightness {
         bail!("Not bright enough: {bright}")
     }
     let response = CreateMessage::new()
-        .content(format!("Bruhh...\n\nThis looks bright as fuck. On a scale from 1 to 9 it's a {:.1}.\nMay I darken it?", bright*9.))
+        .content(format!("Bruhh...\n\nThis looks bright as fuck. On a scale from 1 to 9 it's a {:.1}.\nMay I darken it?", bright*8. + 1.))
         .button(CreateButton::new(NordOptions::new().make_nord_custom_id(&message.id.into(), false))
             .style(ButtonStyle::Primary)
             .emoji("🌙".parse::<ReactionType>().unwrap())
