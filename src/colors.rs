@@ -7,6 +7,8 @@ use std::vec;
 use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTensor, GraphOptimizationLevel};
 use ndarray;
 
+use crate::config::load_config;
+
 #[derive(Clone, Debug)]
 pub enum ImageType {
     Cartoon,
@@ -32,24 +34,25 @@ pub struct Model {
 
 impl Models {
     pub fn to_struct(&self) -> Model {
+        let pwd: String = load_config().threshold.modelpath.into();
         match self {
             Models::U2net => Model {
                 id: 0,
-                path: String::from("models/u2net.onnx"),
+                path: String::from(format!("{pwd}/u2net.onnx")),
                 name: String::from("AI General 2"),
                 width: 320,
                 height: 320,
             },
             Models::IsnetAnime => Model {
                 id: 1,
-                path: String::from("models/isnet-anime.onnx"),
+                path: String::from(format!("{pwd}/isnet-anime.onnx")),
                 name: String::from("AI Anime"),
                 width: 1024,
                 height: 1024,
             },
             Models::IsnetGeneral => Model {
                 id: 2,
-                path: String::from("models/isnet-general-use.onnx"),
+                path: String::from(format!("{pwd}/isnet-general-use.onnx")),
                 name: String::from("AI General"),
                 width: 1024,
                 height: 1024,
