@@ -6,6 +6,7 @@ use std::{collections::HashMap, fmt::Display};
 use std::vec;
 use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTensor, GraphOptimizationLevel};
 use ndarray;
+use derivative::Derivative;
 
 use crate::config::load_config;
 
@@ -139,16 +140,24 @@ impl NordPreset {
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Derivative)]
+#[derivative(PartialEq)]
 pub struct NordOptions {
     pub invert: bool,
     pub hue_rotate: f32,
     pub sepia: bool,
     pub nord: bool,
     pub erase_most_present_color: bool,
+
+    #[derivative(PartialEq = "ignore")]
     pub erase_when_percentage: f64,
+
+    #[derivative(PartialEq = "ignore")]
     pub auto_adjust: bool,
+
+    #[derivative(PartialEq = "ignore")]
     pub start: bool,
+    
     pub model: Models,
     pub activation_function: ActivationFunction,
 }

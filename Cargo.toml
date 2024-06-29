@@ -19,6 +19,7 @@ onnxruntime = "0.0.14"
 ndarray = "0.15.1"
 toml = "0.8.14"
 serde = "1.0"
+derivative = "2.2.0"
 
 [dependencies.serenity]
 default-features = true
