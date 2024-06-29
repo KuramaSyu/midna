@@ -2,7 +2,7 @@ use image::{DynamicImage, GenericImageView, RgbaImage, Rgb, Rgba};
 use imageproc::filter::gaussian_blur_f32;
 use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 use std::vec;
 use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTensor, GraphOptimizationLevel};
 use ndarray;
@@ -310,6 +310,8 @@ impl NordOptions {
         let activation_function_id = parts.next().unwrap().parse::<u8>().unwrap();
         let activation_function = ActivationFunction::from_u8(activation_function_id)
             .expect(&format!("Invalid ActivationFunction ID: {}", activation_function_id));
+        let _id = parts.next().unwrap().parse::<usize>().unwrap();
+        let _message_id = parts.next().unwrap().parse::<u64>().unwrap();
         NordOptions {
             invert, hue_rotate, sepia, 
             nord, erase_most_present_color, 
@@ -327,6 +329,7 @@ impl NordOptions {
             x.erase_most_present_color
         };
 
+        let function_name = format!("Mask Function: {}", self.activation_function.as_str());
         // make option lists, so that the clicked button is inverted
         let mut option_2d_list: Vec<Vec<(&str, bool, NordOptions, bool)>> = vec![
             // component row
@@ -344,6 +347,7 @@ impl NordOptions {
                 ("General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}, is_model_enabled(self)),
                 //("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
                 ("Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}, is_model_enabled(self)),
+                (&function_name, true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self))
             ],
             // preset vec
             vec![
@@ -354,27 +358,19 @@ impl NordOptions {
                 ("Dynamic Background", self.is_preset(NordPreset::DynamicBackground), NordOptions::from_preset(NordPreset::DynamicBackground), true),
             ]
         ];
-        let mut optional_components: Vec<(&str, bool, NordOptions, bool)> = vec![];
-
-        // add activation function button
-        optional_components.push(
-            (self.activation_function.as_str(), true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self)),
-        );
-        option_2d_list.push(optional_components);
-
 
         let mut name_to_color_map = HashMap::<&str, ButtonStyle>::new();
         name_to_color_map.insert("Start", ButtonStyle::Success);
 
-        for (id, option_list) in option_2d_list.into_iter().enumerate() {
+        for (x, option_list) in option_2d_list.into_iter().enumerate() {
             if option_list.len() == 0 {
                 continue;
             }
             let mut action_row = Vec::<CreateButton>::new();
-            for (label, enabled, option, is_enabled) in option_list {
+            for (y, (label, enabled, option, is_enabled)) in option_list.into_iter().enumerate() {
                 //println!("CustomID: {} Label: {}", option.make_nord_custom_id(&message_id, update), label);
                 action_row.push(
-                    CreateButton::new(option.make_nord_custom_id(&message_id, update, Some(id)))
+                    CreateButton::new(option.make_nord_custom_id(&message_id, update, Some(x*10+y)))
                         .label(&format!("{}", label))
                         .style({
                             *name_to_color_map.get(label).unwrap_or(
