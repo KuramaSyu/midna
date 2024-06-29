@@ -261,7 +261,7 @@ impl NordOptions {
                 ("Erase Background", self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start}, true),
                 ("Dominant Color", self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}, is_model_enabled(self)),
                 ("General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}, is_model_enabled(self)),
-                ("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
+                //("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
                 ("Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}, is_model_enabled(self)),
             ],
         ];
