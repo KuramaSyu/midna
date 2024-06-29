@@ -408,7 +408,7 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
     }
     let response = CreateMessage::new()
         .content(format!("Bruhh...\n\nThis looks bright as fuck. On a scale from 1 to 9 it's a {:.1}.\nMay I darken it?", bright*8. + 1.))
-        .button(CreateButton::new(NordOptions::new().make_nord_custom_id(&message.id.into(), false))
+        .button(CreateButton::new(NordOptions::new().make_nord_custom_id(&message.id.into(), false, None))
             .style(ButtonStyle::Primary)
             .emoji("🌙".parse::<ReactionType>().unwrap())
         )
