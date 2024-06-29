@@ -122,6 +122,24 @@ impl ActivationFunction {
 }
 // implement clone
 #[derive(Clone, Debug)]
+
+
+pub enum NordPreset {
+    NordWithColor,
+    Nord,
+    StaticBackground,
+    DynamicBackground,
+}
+
+
+impl NordPreset {
+    pub fn iter() -> Vec<NordPreset> {
+        vec![NordPreset::NordWithColor, NordPreset::Nord, NordPreset::StaticBackground, NordPreset::DynamicBackground]
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct NordOptions {
     pub invert: bool,
     pub hue_rotate: f32,
@@ -203,13 +221,76 @@ impl NordOptions {
         options
     }
 
-    pub fn make_nord_custom_id(&self, message_id: &u64, update: bool) -> String {
+    pub fn from_preset(preset: NordPreset) -> NordOptions {
+        match preset {
+            NordPreset::NordWithColor => {
+                NordOptions {
+                    sepia: false,
+                    auto_adjust: false, 
+                    ..NordOptions::default()
+                }
+            },
+            NordPreset::Nord => {
+                NordOptions { 
+                    auto_adjust: false, 
+                    ..NordOptions::default()
+                }
+            }
+            NordPreset::StaticBackground => {
+                NordOptions {
+                    invert: false,
+                    hue_rotate: 0.0,
+                    sepia: false,
+                    nord: false,
+                    erase_most_present_color: true,
+                    erase_when_percentage: 0.1,
+                    auto_adjust: false,
+                    start: false,
+                    model: Models::Algorithm,
+                    activation_function: ActivationFunction::Sigmoid,
+                }
+            },
+            NordPreset::DynamicBackground => {
+                NordOptions {
+                    invert: false,
+                    hue_rotate: 0.0,
+                    sepia: false,
+                    nord: false,
+                    erase_most_present_color: true,
+                    erase_when_percentage: 0.1,
+                    auto_adjust: false,
+                    start: false,
+                    model: Models::IsnetGeneral,
+                    activation_function: ActivationFunction::Sigmoid,
+                }
+            }
+            _ => panic!("Preset not implemented")
+        }
+    }
+
+    pub fn is_any_preset(&self) -> bool {
+        for preset in NordPreset::iter() {
+            if self == &NordOptions::from_preset(preset) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn is_preset(&self, preset: NordPreset) -> bool {
+        self == &NordOptions::from_preset(preset)
+    }
+
+
+    pub fn make_nord_custom_id(&self, message_id: &u64, update: bool, id: Option<usize>) -> String {
+        // id is needed to make the custom id unique since there could be buttons which do the same
         format!(
-            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}-{}", 
+            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}-{}-{}", 
             update, self.invert, self.hue_rotate, 
             self.sepia, self.nord, self.erase_most_present_color, 
             self.erase_when_percentage, self.auto_adjust, 
-            self.start, self.model.to_struct().id, self.activation_function as u8,message_id
+            self.start, self.model.to_struct().id, self.activation_function as u8,
+            id.unwrap_or(0), message_id
         )
     }
     
@@ -264,19 +345,28 @@ impl NordOptions {
                 //("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
                 ("Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}, is_model_enabled(self)),
             ],
+            // preset vec
+            vec![
+                ("Presets:", self.is_any_preset(), NordOptions { ..self_no_start}, false),
+                ("Nord w/ Color", self.is_preset(NordPreset::NordWithColor), NordOptions::from_preset(NordPreset::NordWithColor), true),
+                ("Nord w/o Color", self.is_preset(NordPreset::Nord), NordOptions::from_preset(NordPreset::Nord), true),
+                ("Static Background", self.is_preset(NordPreset::StaticBackground), NordOptions::from_preset(NordPreset::StaticBackground), true),
+                ("Dynamic Background", self.is_preset(NordPreset::DynamicBackground), NordOptions::from_preset(NordPreset::DynamicBackground), true),
+            ]
         ];
         let mut optional_components: Vec<(&str, bool, NordOptions, bool)> = vec![];
 
+        // add activation function button
         optional_components.push(
             (self.activation_function.as_str(), true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self)),
         );
-
         option_2d_list.push(optional_components);
+
 
         let mut name_to_color_map = HashMap::<&str, ButtonStyle>::new();
         name_to_color_map.insert("Start", ButtonStyle::Success);
 
-        for option_list in option_2d_list {
+        for (id, option_list) in option_2d_list.into_iter().enumerate() {
             if option_list.len() == 0 {
                 continue;
             }
@@ -284,7 +374,7 @@ impl NordOptions {
             for (label, enabled, option, is_enabled) in option_list {
                 //println!("CustomID: {} Label: {}", option.make_nord_custom_id(&message_id, update), label);
                 action_row.push(
-                    CreateButton::new(option.make_nord_custom_id(&message_id, update))
+                    CreateButton::new(option.make_nord_custom_id(&message_id, update, Some(id)))
                         .label(&format!("{}", label))
                         .style({
                             *name_to_color_map.get(label).unwrap_or(
@@ -319,7 +409,7 @@ impl NordOptions {
             last_row.insert(0,
                 CreateButton::new(
                     NordOptions {start: !self.start, ..self_no_start}
-                        .make_nord_custom_id(&message_id, update)
+                        .make_nord_custom_id(&message_id, update, None)
                 )
                 .style(ButtonStyle::Success)
                 .label("Start")
