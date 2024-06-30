@@ -48,7 +48,7 @@ pub fn generate_image(
     let y_font_offset: i32 = -10;
     // make new full transparent image 200x200
     let mut text_overlay = RgbaImage::new(70, 100);
-    draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 20, 0, scale_big, &font, marker);
+    draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 10, 0, scale_big, &font, marker);
     draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 0, 28, scale, &font, &text);
     let (w, h) = text_size(scale, &font, &text);
 
@@ -57,8 +57,8 @@ pub fn generate_image(
     let text_overlay = DynamicImage::ImageRgba8(text_overlay);
     let start_y = find_first_dyed_y_position(&image, (bar_pos as f32 + (text_overlay.width() as f32 * 0.5)) as u32, color).unwrap() as i32 + y_font_offset;
     // draw small debug rect
-    let rect = Rect::at(bar_pos as i32, start_y as i32).of_size(10, 10);
-    draw_filled_rect_mut(&mut image, rect, color);
+    // let rect = Rect::at(bar_pos as i32, start_y as i32).of_size(10, 10);
+    // draw_filled_rect_mut(&mut image, rect, color);
     print!("start y: {} ", start_y);
     overlay(&mut image, &text_overlay, (bar_pos).into(), start_y.into());
     println!("Creating image {:?}", start.elapsed());
