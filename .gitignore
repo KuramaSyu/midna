@@ -17,7 +17,6 @@ Cargo.lock
 # Added by cargo
 
 /target
-*.png
 # Ignore .env files
 .env
 
