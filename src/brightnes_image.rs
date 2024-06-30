@@ -50,7 +50,7 @@ pub fn generate_image(
     let mut text_overlay = RgbaImage::new(70, 100);
     draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 10, 0, scale_big, &font, marker);
     draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 0, 28, scale, &font, &text);
-    let (w, h) = text_size(scale, &font, &text);
+    //let (_w, h) = text_size(scale, &font, &text);
 
     // draw text_overlay to image
     let mut image = DynamicImage::ImageRgba8(image);
