@@ -8,11 +8,11 @@ use ::serenity::all::{
     Attachment, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType
 };
 use std::{
-    collections::HashMap, env, io::Cursor, sync::{Arc, Mutex}, time::Duration
+    collections::HashMap, env, io::{BufWriter, Cursor, Seek}, sync::{Arc, Mutex}, time::Duration
 };
 use anyhow::{bail, Result};
 use reqwest;
-use image::{codecs::png::{CompressionType, FilterType, PngEncoder}, DynamicImage, ImageEncoder};
+use image::{codecs::png::{CompressionType, FilterType, PngEncoder}, DynamicImage, ImageBuffer, ImageEncoder};
 
 // Types used by all command functions
 type AsyncError = Box<dyn std::error::Error + Send + Sync>;
@@ -25,6 +25,7 @@ mod config;
 mod colors;
 mod tickbox;
 mod visual_scale;
+mod brightnes_image;
 
 // Custom user data passed to all command functions
 
@@ -408,13 +409,25 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
         bail!("Not bright enough: {bright}")
     }
     let brightness_1_to_9: f64 = format!("{:.1}", bright * 8.0 + 1.0).parse::<f64>().unwrap();
+
+    let start = std::time::Instant::now();
+    let image_scale = brightnes_image::generate_image(bright, 1.0, 9.0);
+    let mut buffer = Cursor::new(Vec::new()); // Use Cursor to add Seek capability
+    println!("Pre save {:?}", start.elapsed());
+    image_scale.write_to(&mut buffer, image::ImageFormat::WebP).expect("Failed to write image to buffer");
+    println!("After save {:?}", start.elapsed());
+    // Optionally, reset cursor position to the beginning if you need to read from it afterward
+    buffer.set_position(0);
+    let attachment = CreateAttachment::bytes(buffer.into_inner(), "scale.webp");
+
+    println!("Generated image in {:?}", start.elapsed());
     let response = CreateMessage::new()
         .content(
             format!(
-                "Bruhh...\n\nThis looks bright as fuck. On a scale from 1 to 9 it's a {:.1}.\n{}\nMay I darken it?", 
-                bright*8. + 1., 
-                visual_scale::code_box_scale(1, 9, brightness_1_to_9, 50))
+                "Bruhh... This looks bright as fuck. On a scale **from 1 to 9 it's a {:.1}**.\nMay I darken it?", 
+                bright*8. + 1.)
         )
+        .files(vec![attachment])
         .button(CreateButton::new(NordOptions::new().make_nord_custom_id(&message.id.into(), false, None))
             .style(ButtonStyle::Primary)
             .emoji("🌙".parse::<ReactionType>().unwrap())
