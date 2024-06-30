@@ -12,7 +12,7 @@ use std::{
 };
 use anyhow::{bail, Result};
 use reqwest;
-use image::{codecs::png::{CompressionType, FilterType, PngEncoder}, DynamicImage, ImageBuffer, ImageEncoder};
+use image::{codecs::{png::{CompressionType, FilterType, PngEncoder}, webp::WebPEncoder}, DynamicImage, ImageBuffer, ImageEncoder};
 
 // Types used by all command functions
 type AsyncError = Box<dyn std::error::Error + Send + Sync>;
@@ -189,7 +189,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
             return Ok(())
         }
     };
-    let attachment = CreateAttachment::bytes(buffer, "image.png");
+    let attachment = CreateAttachment::bytes(buffer, "image.webp");
     let content = EditInteractionResponse::new()
         .new_attachment(attachment)
         .content("Here it is! May I delete your shiny one?")
@@ -210,8 +210,9 @@ pub async fn process_attachments(message: &Message, data: &Data, options: &NordO
             // Create a PNG encoder with a specific compression level
         {
             let mut cursor = Cursor::new(&mut buffer);
-            let encoder = PngEncoder::new_with_quality(&mut cursor, CompressionType::Fast, FilterType::Adaptive);
-            encoder.write_image(&image.as_bytes(), image.width(), image.height(), image::ExtendedColorType::Rgba8).unwrap();
+            //let encoder = PngEncoder::new_with_quality(&mut cursor, CompressionType::Fast, FilterType::Adaptive);
+            image.write_to( &mut cursor, image::ImageFormat::WebP).expect("Failed to write image to buffer");
+            //encoder.write_image(&image.as_bytes(), image.width(), image.height(), image::ExtendedColorType::Rgba8).unwrap();
         }
         return Ok(buffer);
     }
