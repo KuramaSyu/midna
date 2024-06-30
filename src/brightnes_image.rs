@@ -1,6 +1,6 @@
 use ab_glyph::{FontRef, PxScale};
 use image::{imageops::FilterType, DynamicImage, Rgb, RgbImage, Rgba, RgbaImage};
-use imageproc::drawing::{draw_filled_rect_mut, draw_line_segment_mut, draw_text_mut, text_size, Canvas};
+use imageproc::{drawing::{draw_filled_rect_mut, draw_line_segment_mut, draw_text_mut, text_size, Canvas}, rect::Rect};
 use image::imageops::{overlay};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
@@ -33,7 +33,7 @@ pub fn generate_image(
     //let mut image = RgbImage::new(200, 200);
     let font = FontRef::try_from_slice(include_bytes!("../font.ttf")).unwrap();
     let color = Rgba([222u8, 162u8, 5u8, 255u8]);
-    let height = 60.;
+    let height = 78.;
     let scale = PxScale {
         x: height * 1.2,
         y: height * 1.2,
@@ -45,16 +45,20 @@ pub fn generate_image(
     let marker = "^";
     let text = format!("{:.1}", (max-min) * percentage + min);
     let bar_pos = get_bar_position(140, 535, percentage) as u32;
+    let y_font_offset: i32 = -10;
     // make new full transparent image 200x200
     let mut text_overlay = RgbaImage::new(70, 100);
-    draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 30, 0, scale_big, &font, marker);
-    draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 0, 25, scale, &font, &text);
+    draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 20, 0, scale_big, &font, marker);
+    draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 0, 28, scale, &font, &text);
     let (w, h) = text_size(scale, &font, &text);
 
     // draw text_overlay to image
     let mut image = DynamicImage::ImageRgba8(image);
     let text_overlay = DynamicImage::ImageRgba8(text_overlay);
-    let start_y = find_first_dyed_y_position(&image, (bar_pos as f32 + text_overlay.width() as f32 * 0.8) as u32, color).unwrap() + 10;
+    let start_y = find_first_dyed_y_position(&image, (bar_pos as f32 + (text_overlay.width() as f32 * 0.5)) as u32, color).unwrap() as i32 + y_font_offset;
+    // draw small debug rect
+    let rect = Rect::at(bar_pos as i32, start_y as i32).of_size(10, 10);
+    draw_filled_rect_mut(&mut image, rect, color);
     print!("start y: {} ", start_y);
     overlay(&mut image, &text_overlay, (bar_pos).into(), start_y.into());
     println!("Creating image {:?}", start.elapsed());
