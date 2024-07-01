@@ -1,6 +1,4 @@
-pub fn code_box_scale(start: isize, end: isize, arrow: f64, scale_len: usize) -> String {
-    let mut result = String::new();
-    
+pub fn _code_box_scale(start: isize, end: isize, arrow: f64, scale_len: usize) -> String {
     // Step 1: Calculate positions within the scale
     let start_pos = 0;
     let end_pos = scale_len - 1;
