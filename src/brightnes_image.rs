@@ -10,7 +10,7 @@ use crate::colors::ImageType;
 
 lazy_static! {
     static ref TP_IMAGE: Mutex<RgbaImage> = Mutex::new(
-        image::open("tp.png")
+        image::open("assets/tp.png")
             .unwrap()
             .to_rgba8()
     );
@@ -31,7 +31,7 @@ pub fn generate_image(
     println!("Load image {:?}", start.elapsed());
 
     //let mut image = RgbImage::new(200, 200);
-    let font = FontRef::try_from_slice(include_bytes!("../font.ttf")).unwrap();
+    let font = FontRef::try_from_slice(include_bytes!("../assets/font.ttf")).unwrap();
     let color = Rgba([222u8, 162u8, 5u8, 255u8]);
     let height = 78.;
     let scale = PxScale {
