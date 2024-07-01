@@ -1,10 +1,9 @@
 use ab_glyph::{FontRef, PxScale};
-use image::{imageops::FilterType, DynamicImage, Rgb, RgbImage, Rgba, RgbaImage};
-use imageproc::{drawing::{draw_filled_rect_mut, draw_line_segment_mut, draw_text_mut, text_size, Canvas}, rect::Rect};
-use image::imageops::{overlay};
+use image::{DynamicImage, Rgba, RgbaImage};
+use imageproc::drawing::{draw_text_mut, Canvas};
+use image::imageops::overlay;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
-use crate::colors::ImageType;
 
 
 
@@ -16,23 +15,25 @@ lazy_static! {
     );
 }
 
-//let mut image_buffer: Option<RgbaImage> = None;
+
+
 pub fn generate_image(
     percentage: f32,
     min: f32,
     max: f32,
 ) -> DynamicImage {
-    // include tp.image
 
-
+    // time for debug
     let start = std::time::Instant::now();
+
     // load image tp.png
     let image = TP_IMAGE.lock().unwrap().clone();
-    println!("Load image {:?}", start.elapsed());
 
-    //let mut image = RgbImage::new(200, 200);
+    // load font, set color 
     let font = FontRef::try_from_slice(include_bytes!("../assets/font.ttf")).unwrap();
     let color = Rgba([222u8, 162u8, 5u8, 255u8]);
+
+    // font settings (size, x-y scale ..)
     let height = 78.;
     let scale = PxScale {
         x: height * 1.2,
@@ -42,24 +43,32 @@ pub fn generate_image(
         x: height * 2.,
         y: height * 2.,
     };
+    // marker which is drawn below the bar + text below the marker
     let marker = "^";
     let text = format!("{:.1}", (max-min) * percentage + min);
+
+    // calculate bar position by percentage
     let bar_pos = get_bar_position(140, 535, percentage) as u32;
+    // offset since every font looks different
     let y_font_offset: i32 = -10;
-    // make new full transparent image 200x200
+
+    // new image where marker and text will be drawn
     let mut text_overlay = RgbaImage::new(70, 100);
-    draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 10, 0, scale_big, &font, marker);
-    draw_text_mut(&mut text_overlay, Rgba([222u8, 162u8, 5u8, 255u8]), 0, 28, scale, &font, &text);
-    //let (_w, h) = text_size(scale, &font, &text);
+    draw_text_mut(&mut text_overlay, color, 10, 0, scale_big, &font, marker);
+    draw_text_mut(&mut text_overlay, color, 0, 28, scale, &font, &text);
 
     // draw text_overlay to image
     let mut image = DynamicImage::ImageRgba8(image);
     let text_overlay = DynamicImage::ImageRgba8(text_overlay);
-    let start_y = find_first_dyed_y_position(&image, (bar_pos as f32 + (text_overlay.width() as f32 * 0.5)) as u32, color).unwrap() as i32 + y_font_offset;
-    // draw small debug rect
-    // let rect = Rect::at(bar_pos as i32, start_y as i32).of_size(10, 10);
-    // draw_filled_rect_mut(&mut image, rect, color);
+    // determine y position by moving from bottom to top
+    let start_y = find_first_dyed_y_position(
+        &image, 
+        (bar_pos as f32 + (text_overlay.width() as f32 * 0.5)) as u32, 
+        color
+    ).unwrap() as i32 + y_font_offset;
+
     print!("start y: {} ", start_y);
+    // put text image onto TP image
     overlay(&mut image, &text_overlay, (bar_pos).into(), start_y.into());
     println!("Creating image {:?}", start.elapsed());
     image
