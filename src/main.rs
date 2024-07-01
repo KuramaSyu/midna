@@ -5,14 +5,17 @@ use config::Config;
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
 use ::serenity::all::{
-    Attachment, ButtonStyle, ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, EditAttachments, EditInteractionResponse, Interaction, Message, ReactionType
+    Attachment, ButtonStyle, ComponentInteraction, CreateAttachment, 
+    CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, 
+    CreateInteractionResponseMessage, CreateMessage, EditAttachments, 
+    EditInteractionResponse, Interaction, Message, ReactionType
 };
 use std::{
-    collections::HashMap, env, io::{BufWriter, Cursor, Seek}, sync::{Arc, Mutex}, time::Duration
+    env, io::Cursor, sync::{Arc, Mutex}, time::Duration
 };
 use anyhow::{bail, Result};
 use reqwest;
-use image::{codecs::{png::{CompressionType, FilterType, PngEncoder}, webp::WebPEncoder}, DynamicImage, ImageBuffer, ImageEncoder};
+use image::DynamicImage;
 
 // Types used by all command functions
 type AsyncError = Box<dyn std::error::Error + Send + Sync>;
@@ -60,7 +63,6 @@ impl ImageCache {
     }
 }
 pub struct Data {
-    votes: Mutex<HashMap<String, u32>>,
     image_cache: Arc<ImageCache>,
     config: Config,
     
@@ -302,7 +304,6 @@ async fn main() {
                 println!("Logged in as {}", _ready.user.name);
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 Ok(Data {
-                    votes: Mutex::new(HashMap::new()),
                     image_cache: image_cache,
                     config: config::load_config(),
                 })
@@ -398,19 +399,26 @@ pub async fn fetch_image_and_info(attachment: &Attachment, data: &Data) -> Resul
 }
 
 
-async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment: &Attachment, data: &Data) -> Result<(), anyhow::Error> {
+async fn ask_user_to_darken_image(
+    ctx: &SContext, 
+    message: &Message, 
+    attachment: &Attachment, 
+    data: &Data
+) -> Result<(), anyhow::Error> {
+
+    // download image or get from cache
     image_check(attachment).await?;
     let url = attachment.url.clone();
     let image_and_info = fetch_image_and_info(attachment, data).await;
-    let (image, info) = image_and_info.expect("Image or info is none in ask_user_to_darken_image");
+    let (image, info) = image_and_info
+        .expect("Image or info is none in ask_user_to_darken_image");
     println!("inserting");
     data.image_cache.insert(url, (image.clone(), info.clone())).await;
     let bright = info.brightness.average;
     if bright < data.config.threshold.brightness {
-        bail!("Not bright enough: {bright}")
+        panic!("Not bright enough: {bright}")
     }
-    let brightness_1_to_9: f64 = format!("{:.1}", bright * 8.0 + 1.0).parse::<f64>().unwrap();
-
+    
     let start = std::time::Instant::now();
     let image_scale = brightnes_image::generate_image(bright, 1.0, 9.0);
     let mut buffer = Cursor::new(Vec::new()); // Use Cursor to add Seek capability
@@ -429,7 +437,9 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
                 bright*8. + 1.)
         )
         .files(vec![attachment])
-        .button(CreateButton::new(NordOptions::new().make_nord_custom_id(&message.id.into(), false, None))
+        .button(CreateButton::new(
+            NordOptions::new().make_nord_custom_id(&message.id.into(), false, None)
+        )
             .style(ButtonStyle::Primary)
             .emoji("🌙".parse::<ReactionType>().unwrap())
         )
@@ -438,21 +448,10 @@ async fn ask_user_to_darken_image(ctx: &SContext, message: &Message, attachment:
             .label("No")
         );
     let _new_message = message.channel_id.send_message(&ctx, response).await?;
-    
-    // // Spawn a new task to delete the message after 5 minutes
-    // let ctx_clone = ctx.clone();
-    // let channel_id = message.channel_id;
-    // let message_id = message.id;
-
-    // tokio::spawn(async move {
-    //     sleep(Duration::from_secs(300)).await;
-    //     if let Err(err) = new_message.delete(ctx_clone).await {
-    //         eprintln!("Failed to delete message: {:?}", err);
-    //     }
-    // });
-
     Ok(())
 }
+
+
 async fn fetch_image(
     attachment: &serenity::Attachment, 
     data: &Data, 
