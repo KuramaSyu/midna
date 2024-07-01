@@ -1,5 +1,5 @@
-use poise::{CreateReply, ReplyHandle};
-use serenity::all::{CreateAttachment, Message, User};
+use poise::CreateReply;
+use serenity::all::{CreateAttachment, Message};
 
 use crate::{colors::NordOptions, fetch_image_and_info, process_attachments, tickbox::TickBox, AsyncError, Context};
 
@@ -15,7 +15,7 @@ pub async fn help(
         ctx,
         command.as_deref(),
         poise::builtins::HelpConfiguration {
-            extra_text_at_bottom: "This is an example bot made to showcase features of my custom Discord bot framework",
+            extra_text_at_bottom: "Help for the Midna image manipulation bot.",
             ..Default::default()
         },
     )
