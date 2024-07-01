@@ -2,7 +2,7 @@ use image::{DynamicImage, GenericImageView, RgbaImage, Rgb, Rgba};
 use imageproc::filter::gaussian_blur_f32;
 use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
 use std::vec;
 use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTensor, GraphOptimizationLevel};
 use ndarray;
@@ -273,7 +273,6 @@ impl NordOptions {
                     activation_function: ActivationFunction::Sigmoid,
                 }
             }
-            _ => panic!("Preset not implemented")
         }
     }
 
@@ -340,7 +339,7 @@ impl NordOptions {
 
         let function_name = format!("Mask Function: {}", self.activation_function.as_str());
         // make option lists, so that the clicked button is inverted
-        let mut option_2d_list: Vec<Vec<(&str, bool, NordOptions, bool)>> = vec![
+        let option_2d_list: Vec<Vec<(&str, bool, NordOptions, bool)>> = vec![
             // component row
             vec![
                 // component
