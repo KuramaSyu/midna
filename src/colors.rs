@@ -2,7 +2,7 @@ use image::{DynamicImage, GenericImageView, RgbaImage, Rgb, Rgba};
 use imageproc::filter::gaussian_blur_f32;
 use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::format};
 use std::vec;
 use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTensor, GraphOptimizationLevel};
 use ndarray;
@@ -160,6 +160,7 @@ pub struct NordOptions {
     
     pub model: Models,
     pub activation_function: ActivationFunction,
+    pub background_color: Option<RgbColor>
 }
 
 impl NordOptions {
@@ -180,6 +181,7 @@ impl NordOptions {
             start: false,
             model: Models::Algorithm,
             activation_function: ActivationFunction::Sigmoid,
+            background_color: None,
         }
     }
 
@@ -200,6 +202,7 @@ impl NordOptions {
                 options.auto_adjust = false;
                 options.start = false;
                 options.model = Models::Algorithm;
+                options.background_color = None;
             },
             Some(ImageType::Picture) => {
             if image_information.color_map.most_present_color_percentage > 0.1 {
@@ -213,6 +216,7 @@ impl NordOptions {
                 options.auto_adjust = false;
                 options.start = false;
                 options.model = if is_probably_anime(image_information) { Models::IsnetAnime } else { Models::IsnetGeneral };
+                options.background_color = None;
             } else {
                 // image without predominant color
                 options.invert = false;
@@ -224,6 +228,7 @@ impl NordOptions {
                 options.auto_adjust = false;
                 options.start = false;
                 options.model = if is_probably_anime(image_information) { Models::IsnetAnime } else { Models::IsnetGeneral };
+                options.background_color = None;
             }},
             None => {}
         }
@@ -257,6 +262,7 @@ impl NordOptions {
                     start: false,
                     model: Models::Algorithm,
                     activation_function: ActivationFunction::Sigmoid,
+                    background_color: None,
                 }
             },
             NordPreset::DynamicBackground => {
@@ -271,6 +277,7 @@ impl NordOptions {
                     start: false,
                     model: Models::IsnetGeneral,
                     activation_function: ActivationFunction::Sigmoid,
+                    background_color: None,
                 }
             }
         }
@@ -319,12 +326,23 @@ impl NordOptions {
         let activation_function = ActivationFunction::from_u8(activation_function_id)
             .expect(&format!("Invalid ActivationFunction ID: {}", activation_function_id));
         let _id = parts.next().unwrap().parse::<usize>().unwrap();
+        // colors in format r;g;b
+        let background_color_str: &str = parts.next().unwrap();
+        let background_color = if background_color_str == "None" {
+            None
+        } else {
+            let mut parts = background_color_str.split(";");
+            let r = parts.next().unwrap().parse::<u8>().unwrap();
+            let g = parts.next().unwrap().parse::<u8>().unwrap();
+            let b = parts.next().unwrap().parse::<u8>().unwrap();
+            Some(RgbColor {r, g, b})
+        };
         let _message_id = parts.next().unwrap().parse::<u64>().unwrap();
         NordOptions {
             invert, hue_rotate, sepia, 
             nord, erase_most_present_color, 
             erase_when_percentage, auto_adjust, 
-            start, model, activation_function,
+            start, model, activation_function, background_color
         }
     }
     pub fn build_componets(&self, message_id: u64, update: bool) -> Vec<CreateActionRow> {
@@ -336,7 +354,7 @@ impl NordOptions {
         let is_model_enabled = |x: &Self| {
             x.erase_most_present_color
         };
-
+        let background_color = format!("{:?}", self.background_color);
         let function_name = format!("Mask Function: {}", self.activation_function.as_str());
         // make option lists, so that the clicked button is inverted
         let option_2d_list: Vec<Vec<(&str, bool, NordOptions, bool)>> = vec![
@@ -356,6 +374,9 @@ impl NordOptions {
                 //("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
                 ("Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}, is_model_enabled(self)),
                 (&function_name, true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self))
+            ],
+            vec![
+                (&background_color, self.background_color.is_some(), NordOptions {background_color: None, ..self_no_start}, true),
             ],
             // preset vec
             vec![
@@ -426,7 +447,7 @@ impl NordOptions {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Copy)]
 pub struct RgbColor {
     r: u8,
     g: u8,
