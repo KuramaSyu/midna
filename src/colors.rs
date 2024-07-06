@@ -627,7 +627,6 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
         apply_nord_filter(&mut mod_image, &options);
     }
     if options.background_color.is_some() {
-        println!("Background color is: {:?}", options.background_color.unwrap());
         let background_color = options.background_color.unwrap();
         let mut background_image = RgbaImage::from_pixel(image.width(), image.height(), Rgba([background_color.r, background_color.g, background_color.b, 255]));
         overlay(&mut background_image, &image, 0, 0);
