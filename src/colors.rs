@@ -3,6 +3,7 @@ use image::{DynamicImage, GenericImageView, RgbaImage, Rgb, Rgba};
 use imageproc::filter::gaussian_blur_f32;
 use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
+use std::fmt::Display;
 use std::num::ParseIntError;
 use std::{collections::HashMap, fmt::format};
 use std::vec;
@@ -356,7 +357,7 @@ impl NordOptions {
         let is_model_enabled = |x: &Self| {
             x.erase_most_present_color
         };
-        let background_color = format!("{:?}", self.background_color);
+        let background_color = if self.background_color.is_some() {self.background_color.unwrap().to_string()} else {"None".to_owned()};
         let function_name = format!("Mask Function: {}", self.activation_function.as_str());
         println!("make components with bg: {:?}", self.background_color);
         // make option lists, so that the clicked button is inverted
@@ -451,6 +452,8 @@ impl NordOptions {
     }
 }
 
+
+
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub struct RgbColor {
     r: u8,
@@ -533,6 +536,12 @@ impl RgbColor {
 
     pub fn as_hex(&self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
+    }
+}
+
+impl Display for RgbColor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{:02x}{:02x}{:02x} (r: {}; g: {}; b {})", self.r, self.g, self.b, self.r, self.g, self.b)
     }
 }
 
