@@ -541,7 +541,7 @@ impl RgbColor {
 
 impl Display for RgbColor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#{:02x}{:02x}{:02x} (r: {}; g: {}; b {})", self.r, self.g, self.b, self.r, self.g, self.b)
+        write!(f, "#{:02x}{:02x}{:02x} (r: {} g: {} b {})", self.r, self.g, self.b, self.r, self.g, self.b)
     }
 }
 
