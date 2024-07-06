@@ -1,7 +1,9 @@
+use image::imageops::overlay;
 use image::{DynamicImage, GenericImageView, RgbaImage, Rgb, Rgba};
 use imageproc::filter::gaussian_blur_f32;
 use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
+use std::num::ParseIntError;
 use std::{collections::HashMap, fmt::format};
 use std::vec;
 use onnxruntime::{environment::Environment, ndarray::Array4, tensor::OrtOwnedTensor, GraphOptimizationLevel};
@@ -300,12 +302,12 @@ impl NordOptions {
     pub fn make_nord_custom_id(&self, message_id: &u64, update: bool, id: Option<usize>) -> String {
         // id is needed to make the custom id unique since there could be buttons which do the same
         format!(
-            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}-{}-{}", 
+            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}-{}-{}-{}", 
             update, self.invert, self.hue_rotate, 
             self.sepia, self.nord, self.erase_most_present_color, 
             self.erase_when_percentage, self.auto_adjust, 
             self.start, self.model.to_struct().id, self.activation_function as u8,
-            id.unwrap_or(0), message_id
+            id.unwrap_or(0), if self.background_color.is_some() {self.background_color.unwrap().as_hex()} else {"None".to_string()}, message_id
         )
     }
     
@@ -331,11 +333,7 @@ impl NordOptions {
         let background_color = if background_color_str == "None" {
             None
         } else {
-            let mut parts = background_color_str.split(";");
-            let r = parts.next().unwrap().parse::<u8>().unwrap();
-            let g = parts.next().unwrap().parse::<u8>().unwrap();
-            let b = parts.next().unwrap().parse::<u8>().unwrap();
-            Some(RgbColor {r, g, b})
+            Some(RgbColor::from_hex(background_color_str).unwrap())
         };
         let _message_id = parts.next().unwrap().parse::<u64>().unwrap();
         NordOptions {
@@ -344,6 +342,10 @@ impl NordOptions {
             erase_when_percentage, auto_adjust, 
             start, model, activation_function, background_color
         }
+    }
+
+    pub fn modal_get_color(&self) {
+
     }
     pub fn build_componets(&self, message_id: u64, update: bool) -> Vec<CreateActionRow> {
         let mut components = Vec::new();
@@ -356,12 +358,13 @@ impl NordOptions {
         };
         let background_color = format!("{:?}", self.background_color);
         let function_name = format!("Mask Function: {}", self.activation_function.as_str());
+        println!("make components with bg: {:?}", self.background_color);
         // make option lists, so that the clicked button is inverted
         let option_2d_list: Vec<Vec<(&str, bool, NordOptions, bool)>> = vec![
             // component row
             vec![
                 // component
-                //name: intert, enabled/disabled, When click, then switch enabled/disabled, is enabled
+                //name: intert, blue/gray, When click, then switch enabled/disabled, is enabled
                 ("Invert", self.invert, NordOptions {invert: !self.invert, ..self_no_start}, true),
                 ("Hue Rotate", if self.hue_rotate == 180. {true} else {false}, NordOptions {hue_rotate: if self.hue_rotate == 180. {0.} else {180.}, ..self_no_start}, true),
                 ("Sepia", self.sepia, NordOptions {sepia: !self.sepia, ..self_no_start}, true),
@@ -376,7 +379,8 @@ impl NordOptions {
                 (&function_name, true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self))
             ],
             vec![
-                (&background_color, self.background_color.is_some(), NordOptions {background_color: None, ..self_no_start}, true),
+                ("Set Background", self.background_color.is_some(), NordOptions {background_color: if self.background_color.is_some() {None} else {Some(RgbColor::from_hex("424242").unwrap())}, ..self_no_start}, true),
+                (&background_color, self.background_color.is_some(), NordOptions {background_color: Some(RgbColor::from_hex("000001").unwrap()), ..self_no_start}, self.background_color.is_some()),  // 000001 is reserved for setting new color
             ],
             // preset vec
             vec![
@@ -518,7 +522,18 @@ impl RgbColor {
         let db = b1 as f32 - b2 as f32;
         (dr * dr + dg * dg + db * db).sqrt()
     }
-    
+
+    pub fn from_hex(hex: &str) -> Result<Self, ParseIntError> {
+        let hex = hex.trim_start_matches("#");
+        let r = u8::from_str_radix(&hex[0..2], 16)?;
+        let g = u8::from_str_radix(&hex[2..4], 16)?;
+        let b = u8::from_str_radix(&hex[4..6], 16)?;
+        Ok(RgbColor {r, g, b})
+    }
+
+    pub fn as_hex(&self) -> String {
+        format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
+    }
 }
 
 struct PolarNight {}
@@ -602,7 +617,14 @@ pub fn apply_nord(mut _image: DynamicImage, options: NordOptions, info: &ImageIn
     if options.nord {
         apply_nord_filter(&mut mod_image, &options);
     }
-    if options.sepia || options.hue_rotate != 0.0 || options.nord {
+    if options.background_color.is_some() {
+        println!("Background color is: {:?}", options.background_color.unwrap());
+        let background_color = options.background_color.unwrap();
+        let mut background_image = RgbaImage::from_pixel(image.width(), image.height(), Rgba([background_color.r, background_color.g, background_color.b, 255]));
+        overlay(&mut background_image, &image, 0, 0);
+        mod_image = background_image;
+    }
+    if options.sepia || options.hue_rotate != 0.0 || options.nord || options.background_color.is_some() {
         DynamicImage::from(mod_image)
     } else {
         image
