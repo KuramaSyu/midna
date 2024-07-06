@@ -1,14 +1,11 @@
 #![warn(clippy::str_to_string)]
 mod commands;
-use colors::{ImageInformation, NordOptions};
+use colors::{ImageInformation, NordOptions, RgbColor};
 use config::Config;
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
 use ::serenity::all::{
-    Attachment, ButtonStyle, ComponentInteraction, CreateAttachment, 
-    CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, 
-    CreateInteractionResponseMessage, CreateMessage, EditAttachments, 
-    EditInteractionResponse, Interaction, Message, ReactionType
+    Attachment, ButtonStyle, CacheHttp, ComponentInteraction, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, CreateQuickModal, EditAttachments, EditInteractionResponse, InputTextStyle, Interaction, Message, ModalInteraction, QuickModalResponse, ReactionType
 };
 use std::{
     env, io::Cursor, sync::{Arc, Mutex}, time::Duration
@@ -122,6 +119,69 @@ async fn fetch_or_raise_message(
     }
     message.unwrap()
 }
+// Returns the color as hex, or err
+async fn modal_get_color(ctx: &SContext, interaction: &ComponentInteraction) -> Result<(RgbColor, ModalInteraction)> {
+    let modal = CreateQuickModal::new("Enter a Color")
+        .timeout(std::time::Duration::from_secs(600))
+        .short_field("Color (hex) e.g. #AF4453");
+    let response = interaction.quick_modal(ctx, modal).await?;
+    let response = response.unwrap(); 
+    let (color_code) = (&response.inputs[0]);
+    let color = match RgbColor::from_hex(&color_code) {
+        Ok(color) => {
+            (color, response.interaction)
+        },
+        Err(e) => {
+            response
+                .interaction
+                .create_response(ctx, (|| {
+                    CreateInteractionResponse::Message(CreateInteractionResponseMessage::new()
+                        .content(format!("Invalid color code: {}", e))
+                    )
+                })()).await?;
+            bail!("Invalid color code: {}", e);
+        }
+    };
+    Ok(color)
+}
+
+enum AnyInteraction {
+    Component(ComponentInteraction),
+    Modal(ModalInteraction),
+}
+
+impl AnyInteraction {
+    async fn create_response(&self, cache_http: impl CacheHttp, builder: CreateInteractionResponse) -> Result<(), serenity::Error>
+    {
+        match self {
+            AnyInteraction::Component(interaction) => {
+                interaction.create_response(cache_http, builder).await
+            },
+            AnyInteraction::Modal(interaction) => {
+                interaction.create_response(cache_http, builder).await
+            },
+        }
+    }
+
+    async fn edit_response(&self, cache_http: impl CacheHttp, builder: EditInteractionResponse) -> Result<Message, serenity::Error>
+    {
+        match self {
+            AnyInteraction::Component(interaction) => {
+                interaction.edit_response(cache_http, builder).await
+            },
+            AnyInteraction::Modal(interaction) => {
+                interaction.edit_response(cache_http, builder).await
+            },
+        }
+    }
+
+    fn custom_id(&self) -> &str {
+        match self {
+            AnyInteraction::Component(interaction) => &interaction.data.custom_id,
+            AnyInteraction::Modal(interaction) => &interaction.data.custom_id,
+        }
+    }
+}
 
 async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInteraction, data: &Data) -> Result<()> {
     let content = &interaction.data.custom_id;
@@ -129,7 +189,25 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
     let _update = content.split("-").nth(1).unwrap().parse::<bool>().unwrap_or(true);
 
+    let mut current_interaction = AnyInteraction::Component(interaction.clone());
+
+    // ask for background color
+    if options.background_color == Some(RgbColor::from_hex("000001").unwrap()) {
+        let color: RgbColor;
+        let new_interaction: ModalInteraction;
+        (color, new_interaction) = match modal_get_color(&ctx, &interaction).await {
+            Ok(color) => color,
+            Err(_) => {
+                // Error handled inside modal_get_color
+                return Ok(());
+            }
+        };
+        options.background_color = Some(color);
+        current_interaction = AnyInteraction::Modal(new_interaction);
+    }
     let mut message: Option<Message> = None;
+
+    // auto adjust options
     if options.auto_adjust {
         message = Some(fetch_or_raise_message(&ctx, &interaction, message_id).await);
         let ref unwrapped = message.as_ref().unwrap();
@@ -148,23 +226,23 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
             message = Some(fetch_or_raise_message(&ctx, &interaction, message_id).await);
         }
         let response = CreateInteractionResponse::Acknowledge;
-        interaction.create_response(&ctx, response).await?;
+        current_interaction.create_response(&ctx, response).await?;
         // edit response with new components
         let response = EditInteractionResponse::new()
             .attachments(EditAttachments::keep_all(&interaction.message))
             .content("⌛ I'm working on it. Please wait a moment.")
             .components(new_components.clone());
-        interaction.edit_response(&ctx, response).await.unwrap();
+        current_interaction.edit_response(&ctx, response).await.unwrap();
     } else {
         // first ack, that existing image is being kept
         let response = CreateInteractionResponse::Acknowledge;
-        interaction.create_response(&ctx, response).await?;
+        current_interaction.create_response(&ctx, response).await?;
         // edit response with new components
         let response = EditInteractionResponse::new()
             .attachments(EditAttachments::keep_all(&interaction.message))
             .content("⌛ I change the options. Please wait a moment.")
             .components(new_components.clone());
-        interaction.edit_response(&ctx, response).await.unwrap();
+        current_interaction.edit_response(&ctx, response).await.unwrap();
     }
     
     if !options.start {
@@ -172,12 +250,12 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
             .content("Edited your options.")
             .components(new_components.clone())
         ;
-        interaction.edit_response(&ctx, response).await?;
+        current_interaction.edit_response(&ctx, response).await?;
         return Ok(())
     }
     // ensure existence of message
     if message.is_none() {
-        interaction.edit_response(&ctx, EditInteractionResponse::new()
+        current_interaction.edit_response(&ctx, EditInteractionResponse::new()
             .content("Seems like the bright picture has vanished. I can't darken what I can't see.")
         ).await?;
         return Ok(())
@@ -187,7 +265,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     let buffer = match process_attachments(&message, &data, &options).await {
         Ok(buffer) => buffer,
         Err(e) => {
-            interaction.edit_response(&ctx, EditInteractionResponse::default().content(e.to_string())).await?;
+            current_interaction.edit_response(&ctx, EditInteractionResponse::default().content(e.to_string())).await?;
             return Ok(())
         }
     };
@@ -199,7 +277,7 @@ async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInt
     ;
     // stone emoji: 
     println!("sending message");
-    interaction.edit_response(&ctx, content).await?;
+    current_interaction.edit_response(&ctx, content).await?;
     Ok(())
 }
 
