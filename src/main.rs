@@ -38,7 +38,7 @@ struct ImageCache {
 impl ImageCache {
     fn new() -> Self {
         ImageCache {
-            cache: Arc::new(Mutex::new(TtlCache::new(100))),
+            cache: Arc::new(Mutex::new(TtlCache::new(20))),  // capacity of 20 images
         }
     }
 
