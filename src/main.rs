@@ -26,6 +26,7 @@ mod colors;
 mod tickbox;
 mod visual_scale;
 mod brightnes_image;
+mod db;
 
 // Custom user data passed to all command functions
 
