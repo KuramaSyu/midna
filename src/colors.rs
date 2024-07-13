@@ -794,8 +794,6 @@ pub fn remove_most_present_colors(image: &mut RgbaImage, most_present_color: Rgb
             *pixel = Rgba([r, g, b, new_alpha]);
         }
     }
-    // Apply a Gaussian blur to the alpha channel for smoothing
-    // apply_gaussian_blur_to_alpha(image, 2.0);
 }
 
 fn _apply_gaussian_blur_to_alpha(image: &mut RgbaImage, sigma: f32) {
@@ -967,6 +965,8 @@ fn segment_image<'a>(
     let tensor = output.into_iter().next().unwrap();
     Ok(tensor)
 }
+
+
 fn apply_mask(
     image: &DynamicImage, 
     mask: &onnxruntime::tensor::OrtOwnedTensor<f32, ndarray::Dim<ndarray::IxDynImpl>>,
@@ -1032,9 +1032,11 @@ fn apply_mask(
 pub fn remove_background<'a>(mut session: Session<'_>, image: DynamicImage, options: &NordOptions) -> DynamicImage {
     // start time
     let start = std::time::Instant::now();
+    // generates black-white mask
     let mask = segment_image(&mut session, &image, &options).unwrap();
     println!("[Segmentation] Time taken: {:.3} seconds", start.elapsed().as_secs_f32());
     let start = std::time::Instant::now();
+    // apply mask to image
     let segmented_image = apply_mask(&image, &mask, &options);
     println!("[Masking] Time taken: {:.3} seconds", start.elapsed().as_secs_f32());
     segmented_image
