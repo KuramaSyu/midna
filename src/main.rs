@@ -20,6 +20,9 @@ type Context<'a> = poise::Context<'a, Data, AsyncError>;
 type SContext = serenity::Context;
 use log::{info, warn};
 use ttl_cache::TtlCache;
+use tokio::sync::RwLock;
+use lru_time_cache::LruCache;
+use bytes::Bytes;
 
 mod config;
 mod colors;
@@ -32,36 +35,31 @@ mod db;
 
 
 struct ImageCache {
-    cache: Arc<Mutex<TtlCache<String, (DynamicImage, ImageInformation)>>>,
+    cache: RwLock<LruCache<String, (Bytes, ImageInformation)>>,
 }
 
-
 impl ImageCache {
-    fn new() -> Self {
-        ImageCache {
-            cache: Arc::new(Mutex::new(TtlCache::new(20))),  // capacity of 20 images
+    fn new(capacity: usize, ttl: Duration) -> Self {
+        Self {
+            cache: RwLock::new(LruCache::with_expiry_duration_and_capacity(ttl, capacity)),
         }
     }
 
-    async fn get(&self, url: &str) -> Option<(DynamicImage, ImageInformation)> {
-        println!("Checking cache for image");
-        let cache = self.cache.lock().expect("cant access cache");
-        println!("Cache: {}", cache.clone().iter().count());
-        cache.get(&url.to_string()).cloned()
+    async fn insert(&self, key: String, image: DynamicImage, info: ImageInformation) {
+        let buffer = image.into_bytes();
+        let mut cache = self.cache.write().await;
+        cache.insert(key, (Bytes::from(buffer), info));
     }
 
-    async fn insert(&self, url: String, information: (DynamicImage, ImageInformation)) -> Option<()> {
-        println!("Inserting image into cache");
-        let mut cache = self.cache.lock().unwrap();
-        println!("Cache insert before: {}", cache.clone().iter().count());
-        cache.insert(url.clone(), information, Duration::from_secs(3600));
-        println!("Cache insert after: {}", cache.clone().iter().count());
-        
-        Some(())
+    async fn get(&self, key: &str,) -> Option<(DynamicImage, ImageInformation)> {
+        let mut cache = self.cache.write().await;
+        cache.get(key).and_then(|(bytes, info)| {
+            Some((image::load_from_memory(bytes).unwrap(), info.clone()))
+        })
     }
 }
 pub struct Data {
-    image_cache: Arc<ImageCache>,
+    image_cache: ImageCache,
     config: Config,
     
 }
@@ -331,7 +329,7 @@ async fn main() {
     dotenv().ok();
     // FrameworkOptions contains all of poise's configuration option in one struct
     // Every option can be omitted to use its default value
-    let image_cache = Arc::new(ImageCache::new());
+    let image_cache = ImageCache::new(20, Duration::from_secs(600));
     let options = poise::FrameworkOptions {
         commands: vec![commands::edit_message_image(), commands::help()],
         prefix_options: poise::PrefixFrameworkOptions {
@@ -492,7 +490,7 @@ async fn ask_user_to_darken_image(
     let (image, info) = image_and_info
         .expect("Image or info is none in ask_user_to_darken_image");
     println!("inserting");
-    data.image_cache.insert(url, (image.clone(), info.clone())).await;
+    data.image_cache.insert(url, image.clone(), info.clone()).await;
     let bright = info.brightness.average;
     if bright < data.config.threshold.brightness {
         panic!("Not bright enough: {bright}")
@@ -537,7 +535,7 @@ async fn fetch_image(
 ) -> (DynamicImage, ImageInformation) {
     image_check(attachment).await.unwrap();
     let url = attachment.url.clone();
-    let image_and_info = {
+    let image_and_info: std::result::Result<(DynamicImage, ImageInformation), anyhow::Error> = {
         let image = data.image_cache.get(&url).await;
         if image.is_none() {
             let image = download_image(&attachment).await.unwrap();
