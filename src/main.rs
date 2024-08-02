@@ -35,7 +35,7 @@ mod db;
 
 
 struct ImageCache {
-    cache: RwLock<LruCache<String, (Bytes, ImageInformation)>>,
+    cache: RwLock<LruCache<String, (DynamicImage, ImageInformation)>>,
 }
 
 impl ImageCache {
@@ -46,15 +46,14 @@ impl ImageCache {
     }
 
     async fn insert(&self, key: String, image: DynamicImage, info: ImageInformation) {
-        let buffer = image.into_bytes();
-        let mut cache = self.cache.write().await;
-        cache.insert(key, (Bytes::from(buffer), info));
+        let mut cache = self.cache.write();
+        cache.await.insert(key, (image, info));
     }
 
-    async fn get(&self, key: &str,) -> Option<(DynamicImage, ImageInformation)> {
-        let mut cache = self.cache.write().await;
-        cache.get(key).and_then(|(bytes, info)| {
-            Some((image::load_from_memory(bytes).unwrap(), info.clone()))
+    async fn get(&self, key: &str) -> Option<(DynamicImage, ImageInformation)> {
+        let mut cache = self.cache.write();
+        cache.await.get(key).map(|(image, info)| {
+            (image.clone(), info.clone())
         })
     }
 }
