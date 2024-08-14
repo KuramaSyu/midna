@@ -7,8 +7,9 @@ use dotenv::dotenv;
 use ::serenity::all::{
     Attachment, ButtonStyle, CacheHttp, ComponentInteraction, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, CreateQuickModal, EditAttachments, EditInteractionResponse, InputTextStyle, Interaction, Message, ModalInteraction, QuickModalResponse, ReactionType
 };
+use toml::value::Datetime;
 use std::{
-    env, io::Cursor, sync::{Arc, Mutex}, time::Duration
+    env, io::Cursor, sync::{Arc}, time::Duration
 };
 use anyhow::{bail, Result};
 use reqwest;
@@ -20,10 +21,10 @@ type Context<'a> = poise::Context<'a, Data, AsyncError>;
 type SContext = serenity::Context;
 use log::{info, warn};
 use ttl_cache::TtlCache;
-use tokio::sync::RwLock;
+use tokio::{sync::{Mutex, RwLock}, time::Instant};
 use lru_time_cache::LruCache;
 use bytes::Bytes;
-
+use std::collections::HashSet;
 mod config;
 mod colors;
 mod tickbox;
@@ -60,7 +61,7 @@ impl ImageCache {
 pub struct Data {
     image_cache: ImageCache,
     config: Config,
-    
+    question_messages: Mutex<HashSet<u64>>,
 }
 
 async fn on_error(error: poise::FrameworkError<'_, Data, AsyncError>) {
@@ -182,6 +183,7 @@ impl AnyInteraction {
 }
 
 async fn handle_interaction_darkening(ctx: &SContext, interaction: &ComponentInteraction, data: &Data) -> Result<()> {
+    data.question_messages.lock().await.remove(&interaction.message.id.into());
     let content = &interaction.data.custom_id;
     let mut options = NordOptions::from_custom_id(&content);
     let message_id = content.split("-").last().unwrap().parse::<u64>()?;
@@ -382,6 +384,7 @@ async fn main() {
                 Ok(Data {
                     image_cache: image_cache,
                     config: config::load_config(),
+                    question_messages: Mutex::new(HashSet::new()),
                 })
             })
         })
@@ -506,11 +509,14 @@ async fn ask_user_to_darken_image(
     let attachment = CreateAttachment::bytes(buffer.into_inner(), "scale.webp");
 
     println!("Generated image in {:?}", start.elapsed());
+    // trashbin icon: 
+    let delete_time = chrono::Utc::now() + chrono::Duration::seconds(30);
     let response = CreateMessage::new()
         .content(
             format!(
-                "Bruhh... This looks bright as fuck. On a scale **from 1 to 9 it's a {:.1}**.\nMay I darken it?", 
-                bright*8. + 1.)
+                "Bruhh... This looks bright as fuck. On a scale **from 1 to 9 it's a {:.1}**.\nMay I darken it? [🗑️ <t:{}:R>]", 
+                bright*8. + 1., delete_time.timestamp()
+            )
         )
         .files(vec![attachment])
         .button(CreateButton::new(
@@ -523,7 +529,29 @@ async fn ask_user_to_darken_image(
             .style(ButtonStyle::Primary)
             .label("No")
         );
-    let _new_message = message.channel_id.send_message(&ctx, response).await?;
+    {
+
+    }
+    
+    let new_message = message.channel_id.send_message(&ctx, response).await?;
+    {
+        let mut question_messages_set = data.question_messages.lock().await;
+        question_messages_set.insert(new_message.id.into());
+    }
+    // wait 30 sec:
+    tokio::time::sleep(
+        Duration::from_secs(
+            (delete_time - chrono::Utc::now()).num_seconds().try_into().unwrap_or(0)
+        )
+    ).await;
+    // delete message and drop id from mutex set
+    
+    let mut question_messages_set = data.question_messages.lock().await;
+    if !question_messages_set.contains(&new_message.id.into()) {
+        return Ok(())
+    }
+    new_message.delete(&ctx).await?;
+    question_messages_set.remove(&message.id.into());
     Ok(())
 }
 
