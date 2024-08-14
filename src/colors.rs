@@ -3,6 +3,7 @@ use image::{DynamicImage, GenericImageView, RgbaImage, Rgb, Rgba};
 use imageproc::filter::gaussian_blur_f32;
 use onnxruntime::session::Session;
 use serenity::all::{ButtonStyle, CreateActionRow, CreateButton, ReactionType};
+use std::borrow::Borrow;
 use std::fmt::Display;
 use std::num::ParseIntError;
 use std::{collections::HashMap, fmt::format};
@@ -163,7 +164,10 @@ pub struct NordOptions {
     
     pub model: Models,
     pub activation_function: ActivationFunction,
-    pub background_color: Option<RgbColor>
+    pub background_color: Option<RgbColor>,
+
+    #[derivative(PartialEq = "ignore")]
+    pub simple_layout: bool,
 }
 
 impl NordOptions {
@@ -185,6 +189,7 @@ impl NordOptions {
             model: Models::Algorithm,
             activation_function: ActivationFunction::Sigmoid,
             background_color: None,
+            simple_layout: true,
         }
     }
 
@@ -238,18 +243,20 @@ impl NordOptions {
         options
     }
 
-    pub fn from_preset(preset: NordPreset) -> NordOptions {
+    pub fn from_preset(preset: NordPreset, nord_options: &NordOptions) -> NordOptions {
         match preset {
             NordPreset::NordWithColor => {
                 NordOptions {
                     sepia: false,
                     auto_adjust: false, 
+                    simple_layout: nord_options.simple_layout,
                     ..NordOptions::default()
                 }
             },
             NordPreset::Nord => {
                 NordOptions { 
                     auto_adjust: false, 
+                    simple_layout: nord_options.simple_layout,
                     ..NordOptions::default()
                 }
             }
@@ -266,6 +273,7 @@ impl NordOptions {
                     model: Models::Algorithm,
                     activation_function: ActivationFunction::Sigmoid,
                     background_color: None,
+                    ..nord_options.clone()
                 }
             },
             NordPreset::DynamicBackground => {
@@ -281,6 +289,7 @@ impl NordOptions {
                     model: Models::IsnetGeneral,
                     activation_function: ActivationFunction::Sigmoid,
                     background_color: None,
+                    ..nord_options.clone()
                 }
             }
         }
@@ -288,7 +297,7 @@ impl NordOptions {
 
     pub fn is_any_preset(&self) -> bool {
         for preset in NordPreset::iter() {
-            if self == &NordOptions::from_preset(preset) {
+            if self == &NordOptions::from_preset(preset, &NordOptions::default()) {
                 return true;
             }
         }
@@ -296,19 +305,22 @@ impl NordOptions {
     }
 
     pub fn is_preset(&self, preset: NordPreset) -> bool {
-        self == &NordOptions::from_preset(preset)
+        self == &NordOptions::from_preset(preset, &NordOptions::default())
     }
 
 
     pub fn make_nord_custom_id(&self, message_id: &u64, update: bool, id: Option<usize>) -> String {
         // id is needed to make the custom id unique since there could be buttons which do the same
         format!(
-            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}-{}-{}-{}", 
+            "darken-{}-{}-{}-{}-{}-{}-{:.2}-{}-{}-{}-{}-{}-{}-{}-{}", 
             update, self.invert, self.hue_rotate, 
             self.sepia, self.nord, self.erase_most_present_color, 
             self.erase_when_percentage, self.auto_adjust, 
             self.start, self.model.to_struct().id, self.activation_function as u8,
-            id.unwrap_or(0), if self.background_color.is_some() {self.background_color.unwrap().as_hex()} else {"None".to_string()}, message_id
+            id.unwrap_or(0), if self.background_color.is_some() {
+                                self.background_color.unwrap().as_hex()
+                            } else {"None".to_string()}, 
+            self.simple_layout, message_id,
         )
     }
     
@@ -336,12 +348,14 @@ impl NordOptions {
         } else {
             Some(RgbColor::from_hex(background_color_str).unwrap())
         };
+        let simple_layout = parts.next().unwrap().parse::<bool>().unwrap();
         let _message_id = parts.next().unwrap().parse::<u64>().unwrap();
         NordOptions {
             invert, hue_rotate, sepia, 
             nord, erase_most_present_color, 
             erase_when_percentage, auto_adjust, 
-            start, model, activation_function, background_color
+            start, model, activation_function, background_color,
+            simple_layout
         }
     }
 
@@ -354,60 +368,29 @@ impl NordOptions {
         let mut self_no_start = self.clone();
         self_no_start.start = false;
 
-        let is_model_enabled = |x: &Self| {
-            x.erase_most_present_color
-        };
-        let background_color = if self.background_color.is_some() {self.background_color.unwrap().to_string()} else {"None".to_owned()};
-        let function_name = format!("Mask Function: {}", self.activation_function.as_str());
         println!("make components with bg: {:?}", self.background_color);
         // make option lists, so that the clicked button is inverted
-        let option_2d_list: Vec<Vec<(&str, bool, NordOptions, bool)>> = vec![
-            // component row
-            vec![
-                // component
-                //name: intert, blue/gray, When click, then switch enabled/disabled, is enabled
-                ("Invert", self.invert, NordOptions {invert: !self.invert, ..self_no_start}, true),
-                ("Hue Rotate", if self.hue_rotate == 180. {true} else {false}, NordOptions {hue_rotate: if self.hue_rotate == 180. {0.} else {180.}, ..self_no_start}, true),
-                ("Sepia", self.sepia, NordOptions {sepia: !self.sepia, ..self_no_start}, true),
-                ("Nord", self.nord, NordOptions {nord: !self.nord, ..self_no_start}, true),
-            ],
-            vec![
-                ("Erase Background", self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start}, true),
-                ("Dominant Color", self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}, is_model_enabled(self)),
-                ("General Use", self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}, is_model_enabled(self)),
-                //("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
-                ("Anime", self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}, is_model_enabled(self)),
-                (&function_name, true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self))
-            ],
-            vec![
-                ("Set Background", self.background_color.is_some(), NordOptions {background_color: if self.background_color.is_some() {None} else {Some(RgbColor::from_hex("424242").unwrap())}, ..self_no_start}, true),
-                (&background_color, self.background_color.is_some(), NordOptions {background_color: Some(RgbColor::from_hex("000001").unwrap()), ..self_no_start}, self.background_color.is_some()),  // 000001 is reserved for setting new color
-            ],
-            // preset vec
-            vec![
-                ("Presets:", self.is_any_preset(), NordOptions { ..self_no_start}, false),
-                ("Nord w/ Color", self.is_preset(NordPreset::NordWithColor), NordOptions::from_preset(NordPreset::NordWithColor), true),
-                ("Nord w/o Color", self.is_preset(NordPreset::Nord), NordOptions::from_preset(NordPreset::Nord), true),
-                ("Static Background", self.is_preset(NordPreset::StaticBackground), NordOptions::from_preset(NordPreset::StaticBackground), true),
-                ("Dynamic Background", self.is_preset(NordPreset::DynamicBackground), NordOptions::from_preset(NordPreset::DynamicBackground), true),
-            ]
-        ];
+        let option_2d_list = match self.simple_layout {
+            true => self._generate_simple_compoenents(),
+            false => self._generate_detailed_components(),
+        };
 
         let mut name_to_color_map = HashMap::<&str, ButtonStyle>::new();
         name_to_color_map.insert("Start", ButtonStyle::Success);
 
+        // convert vec to components
         for (x, option_list) in option_2d_list.into_iter().enumerate() {
             if option_list.len() == 0 {
                 continue;
             }
             let mut action_row = Vec::<CreateButton>::new();
             for (y, (label, enabled, option, is_enabled)) in option_list.into_iter().enumerate() {
-                //println!("CustomID: {} Label: {}", option.make_nord_custom_id(&message_id, update), label);
+                // iterate over one inner vec
                 action_row.push(
                     CreateButton::new(option.make_nord_custom_id(&message_id, update, Some(x*10+y)))
                         .label(&format!("{}", label))
                         .style({
-                            *name_to_color_map.get(label).unwrap_or(
+                            *name_to_color_map.get(label.as_str()).unwrap_or(
                                 if enabled {  &ButtonStyle::Primary } 
                                 else { &ButtonStyle::Secondary }
                             )
@@ -423,23 +406,24 @@ impl NordOptions {
         let mut last_row: Vec<CreateButton> = vec![
             CreateButton::new(format!("delete-{}", message_id))
                 .style(ButtonStyle::Secondary)
-                .label("Dispose of the old!")
-                .emoji("🗑️".parse::<ReactionType>().unwrap()),
+                .label("Keep new")
+                .emoji("✅".parse::<ReactionType>().unwrap()),
             // stop button
             CreateButton::new(format!("stop-{}", message_id))
                 .style(ButtonStyle::Secondary)
-                .label("Dispose of this")
-                .emoji("🗑️".parse::<ReactionType>().unwrap()),
+                .label("Keep old")
+                .emoji("✅".parse::<ReactionType>().unwrap()),
             CreateButton::new(format!("clear-{}", message_id))
                 .style(ButtonStyle::Secondary)
-                .label("Keep both")
+                .emoji("✅".parse::<ReactionType>().unwrap())
+                .label("Keep both"),
         ];
         // add start button
         if !self.start {
             last_row.insert(0,
                 CreateButton::new(
                     NordOptions {start: !self.start, ..self_no_start}
-                        .make_nord_custom_id(&message_id, update, None)
+                        .make_nord_custom_id(&message_id, update, Some(51))
                 )
                 .style(ButtonStyle::Success)
                 .label("Start")
@@ -449,6 +433,73 @@ impl NordOptions {
         components.push(CreateActionRow::Buttons(last_row));
 
         components
+    }
+
+    fn _generate_simple_compoenents(&self) -> Vec<Vec<(String, bool, NordOptions, bool)>> {
+        let mut self_no_start = self.clone();
+        self_no_start.start = false;
+        let layout_label = if !self.simple_layout { "Simple Layout" } else { "Advanced Layout" };
+
+        // make option lists, so that the clicked button is inverted
+        let option_2d_list: Vec<Vec<(String, bool, NordOptions, bool)>> = vec![
+            vec![
+                ("▼ More Options".into(), !self.simple_layout, NordOptions {simple_layout: !self.simple_layout, ..self_no_start}, true)
+            ],
+            // preset vec
+            vec![
+                ("Nord w/ Color".into(), self.is_preset(NordPreset::NordWithColor), NordOptions::from_preset(NordPreset::NordWithColor, &self_no_start), true),
+                ("Nord w/o Color".into(), self.is_preset(NordPreset::Nord), NordOptions::from_preset(NordPreset::Nord, &self_no_start), true),
+                ("Static Background".into(), self.is_preset(NordPreset::StaticBackground), NordOptions::from_preset(NordPreset::StaticBackground, &self_no_start), true),
+                ("Dynamic Background".into(), self.is_preset(NordPreset::DynamicBackground), NordOptions::from_preset(NordPreset::DynamicBackground, &self_no_start), true),
+            ],
+        ];
+        option_2d_list
+    }
+
+    fn _generate_detailed_components(&self) -> Vec<Vec<(String, bool, NordOptions, bool)>> {
+        let mut self_no_start = self.clone();
+        self_no_start.start = false;
+
+        let is_model_enabled = |x: &Self| {
+            x.erase_most_present_color
+        };
+        let background_color = if self.background_color.is_some() {self.background_color.unwrap().to_string()} else {"None".to_owned()};
+        let function_name = format!("Mask Function: {}", self.activation_function.as_str());
+        println!("make components with bg: {:?}", self.background_color);
+        // make option lists, so that the clicked button is inverted
+        let option_2d_list: Vec<Vec<(String, bool, NordOptions, bool)>> = vec![
+            // component row
+            vec![
+                // component
+                //name: intert, blue/gray, When click, then switch enabled/disabled, is enabled // arrow up str: ▲ // arrow down str: ▼
+                ("▲ Show only Presets".into(), !self.simple_layout, NordOptions {simple_layout: !self.simple_layout, ..self_no_start}, true),
+                ("Invert".into(), self.invert, NordOptions {invert: !self.invert, ..self_no_start}, true),
+                ("Hue Rotate".into(), if self.hue_rotate == 180. {true} else {false}, NordOptions {hue_rotate: if self.hue_rotate == 180. {0.} else {180.}, ..self_no_start}, true),
+                ("Sepia".into(), self.sepia, NordOptions {sepia: !self.sepia, ..self_no_start}, true),
+                ("Nord".into(), self.nord, NordOptions {nord: !self.nord, ..self_no_start}, true),
+            ],
+            vec![
+                ("Erase Background".into(), self.erase_most_present_color, NordOptions {erase_most_present_color: !self.erase_most_present_color, ..self_no_start}, true),
+                ("Dominant Color".into(), self.model == Models::Algorithm, NordOptions {model: Models::Algorithm, ..self_no_start}, is_model_enabled(self)),
+                ("General Use".into(), self.model == Models::IsnetGeneral, NordOptions {model: Models::IsnetGeneral, ..self_no_start}, is_model_enabled(self)),
+                //("General Use 2", self.model == Models::U2net, NordOptions {model: Models::U2net, ..self_no_start}, is_model_enabled(self)),
+                ("Anime".into(), self.model == Models::IsnetAnime, NordOptions {model: Models::IsnetAnime, ..self_no_start}, is_model_enabled(self)),
+                (function_name, true, NordOptions {activation_function: self.activation_function.next(), ..self_no_start}, is_model_enabled(self))
+            ],
+            vec![
+                ("Set Background".into(), self.background_color.is_some(), NordOptions {background_color: if self.background_color.is_some() {None} else {Some(RgbColor::from_hex("424242").unwrap())}, ..self_no_start}, true),
+                (background_color, self.background_color.is_some(), NordOptions {background_color: Some(RgbColor::from_hex("000001").unwrap()), ..self_no_start}, self.background_color.is_some()),  // 000001 is reserved for setting new color
+            ],
+            // preset vec
+            vec![
+                //("Presets:".into(), self.is_any_preset(), NordOptions { ..self_no_start}, false),
+                ("Nord w/ Color".into(), self.is_preset(NordPreset::NordWithColor), NordOptions::from_preset(NordPreset::NordWithColor, &self_no_start), true),
+                ("Nord w/o Color".into(), self.is_preset(NordPreset::Nord), NordOptions::from_preset(NordPreset::Nord, &self_no_start), true),
+                ("Static Background".into(), self.is_preset(NordPreset::StaticBackground), NordOptions::from_preset(NordPreset::StaticBackground, &self_no_start), true),
+                ("Dynamic Background".into(), self.is_preset(NordPreset::DynamicBackground), NordOptions::from_preset(NordPreset::DynamicBackground, &self_no_start), true),
+            ]
+        ];
+        option_2d_list
     }
 }
 
