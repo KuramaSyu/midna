@@ -447,8 +447,8 @@ impl NordOptions {
             ],
             // preset vec
             vec![
-                ("Nord w/ Color".into(), self.is_preset(NordPreset::NordWithColor), NordOptions::from_preset(NordPreset::NordWithColor, &self_no_start), true),
-                ("Nord w/o Color".into(), self.is_preset(NordPreset::Nord), NordOptions::from_preset(NordPreset::Nord, &self_no_start), true),
+                ("Colorful Dark".into(), self.is_preset(NordPreset::NordWithColor), NordOptions::from_preset(NordPreset::NordWithColor, &self_no_start), true),
+                ("Mono Dark".into(), self.is_preset(NordPreset::Nord), NordOptions::from_preset(NordPreset::Nord, &self_no_start), true),
                 ("Static Background".into(), self.is_preset(NordPreset::StaticBackground), NordOptions::from_preset(NordPreset::StaticBackground, &self_no_start), true),
                 ("Dynamic Background".into(), self.is_preset(NordPreset::DynamicBackground), NordOptions::from_preset(NordPreset::DynamicBackground, &self_no_start), true),
             ],
