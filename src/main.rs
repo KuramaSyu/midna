@@ -203,19 +203,6 @@ pub async fn process_attachments(message: &Message, data: &Data, options: &NordO
     }
     panic!("No attachment found in message");
 }
-async fn initial_clear_components(ctx: &SContext, interaction: &ComponentInteraction) -> Result<()> {
-    // fetch message
-    let response = CreateInteractionResponse::Acknowledge;
-    interaction.create_response(&ctx, response).await?;
-    let response = EditInteractionResponse::new()
-        .attachments(EditAttachments::keep_all(&interaction.message))
-        .content("")
-        .components(vec![]);
-    interaction.edit_response(&ctx, response).await?;
-    Ok(())
-}
-
-
 
 
 #[tokio::main]
