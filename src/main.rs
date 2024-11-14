@@ -25,40 +25,20 @@ use tokio::{sync::{Mutex, RwLock}, time::Instant};
 use lru_time_cache::LruCache;
 use bytes::Bytes;
 use std::collections::HashSet;
+
 mod config;
-mod colors;
 mod tickbox;
 mod visual_scale;
 mod brightnes_image;
-mod db;
 mod interaction_handeling;
 
+pub mod utils;
+use utils::image_cache::ImageCache;
+use utils::colors;
 // Custom user data passed to all command functions
 
 
-struct ImageCache {
-    cache: RwLock<LruCache<String, (DynamicImage, ImageInformation)>>,
-}
 
-impl ImageCache {
-    fn new(capacity: usize, ttl: Duration) -> Self {
-        Self {
-            cache: RwLock::new(LruCache::with_expiry_duration_and_capacity(ttl, capacity)),
-        }
-    }
-
-    async fn insert(&self, key: String, image: DynamicImage, info: ImageInformation) {
-        let mut cache = self.cache.write();
-        cache.await.insert(key, (image, info));
-    }
-
-    async fn get(&self, key: &str) -> Option<(DynamicImage, ImageInformation)> {
-        let mut cache = self.cache.write();
-        cache.await.get(key).map(|(image, info)| {
-            (image.clone(), info.clone())
-        })
-    }
-}
 pub struct Data {
     image_cache: ImageCache,
     config: Config,
