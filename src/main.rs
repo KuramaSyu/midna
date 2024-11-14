@@ -5,9 +5,8 @@ use config::Config;
 use poise::serenity_prelude as serenity;
 use dotenv::dotenv;
 use ::serenity::all::{
-    Attachment, ButtonStyle, CacheHttp, ComponentInteraction, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, CreateMessage, CreateQuickModal, EditAttachments, EditInteractionResponse, InputTextStyle, Interaction, Message, ModalInteraction, QuickModalResponse, ReactionType
+    Attachment, ButtonStyle, CacheHttp, ComponentInteraction, CreateAttachment, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, CreateQuickModal, EditInteractionResponse, Interaction, Message, ModalInteraction, ReactionType
 };
-use toml::value::Datetime;
 use std::{
     env, io::Cursor, sync::{Arc}, time::Duration
 };
@@ -20,10 +19,7 @@ type AsyncError = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, AsyncError>;
 type SContext = serenity::Context;
 use log::{info, warn};
-use ttl_cache::TtlCache;
-use tokio::{sync::{Mutex, RwLock}, time::Instant};
-use lru_time_cache::LruCache;
-use bytes::Bytes;
+use tokio::sync::Mutex;
 use std::collections::HashSet;
 
 mod config;
@@ -107,7 +103,7 @@ async fn modal_get_color(ctx: &SContext, interaction: &ComponentInteraction) -> 
         .short_field("Color (hex) e.g. #AF4453");
     let response = interaction.quick_modal(ctx, modal).await?;
     let response = response.unwrap(); 
-    let (color_code) = (&response.inputs[0]);
+    let color_code = &response.inputs[0];
     let color = match RgbColor::from_hex(&color_code) {
         Ok(color) => {
             (color, response.interaction)
