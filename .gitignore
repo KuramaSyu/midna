@@ -27,3 +27,4 @@ Cargo.lock
 **/*.env
 models/*.onnx
 test.py
+.vscode/
