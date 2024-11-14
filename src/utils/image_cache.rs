@@ -1,12 +1,8 @@
-use poise::serenity_prelude as serenity;
-use ::serenity::all::CacheHttp;
 use std::time::Duration;
 use image::DynamicImage;
-
-// Types used by all command functions
-type SContext = serenity::Context;
 use tokio::sync::RwLock;
 use lru_time_cache::LruCache;
+
 // use colors.rs
 use crate::utils::colors::ImageInformation;
 
