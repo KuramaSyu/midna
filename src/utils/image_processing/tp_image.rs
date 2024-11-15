@@ -50,7 +50,7 @@ pub fn generate_tp_image(
     let image = TP_IMAGE.lock().unwrap().clone();
 
     // load font, set color 
-    let font = FontRef::try_from_slice(include_bytes!("../assets/font.ttf")).unwrap();
+    let font = FontRef::try_from_slice(include_bytes!("../../../assets/font.ttf")).unwrap();
     let color = Rgba([222u8, 162u8, 5u8, 255u8]);
 
     // font settings (size, x-y scale ..)
