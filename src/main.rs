@@ -25,12 +25,12 @@ use std::collections::HashSet;
 mod config;
 mod tickbox;
 mod visual_scale;
-mod brightnes_image;
 mod interaction_handeling;
 
 pub mod utils;
 use utils::image_cache::ImageCache;
 use utils::colors;
+use utils::generate_tp_image;
 // Custom user data passed to all command functions
 
 
@@ -356,7 +356,7 @@ async fn ask_user_to_darken_image(
     }
     
     let start = std::time::Instant::now();
-    let image_scale = brightnes_image::generate_image(bright, 1.0, 9.0);
+    let image_scale = generate_tp_image(bright, 1.0, 9.0);
     let mut buffer = Cursor::new(Vec::new()); // Use Cursor to add Seek capability
     println!("Pre save {:?}", start.elapsed());
     image_scale.write_to(&mut buffer, image::ImageFormat::WebP).expect("Failed to write image to buffer");
