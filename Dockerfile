@@ -16,7 +16,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build the application
 COPY . .
-RUN cargo build --release --bin image2nord
+RUN cargo build --release --bin midna
 RUN ls -l /app/target/release
   
 # Base image for the final application
@@ -39,7 +39,7 @@ RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.8.1/onnxr
     && ldconfig /opt/onnxruntime/lib
 
 # Copy the compiled Rust binary to the final image
-COPY --from=builder /app/target/release/image2nord /usr/local/bin
+COPY --from=builder /app/target/release/midna /usr/local/bin
 
 # Command to run the application
-ENTRYPOINT ["/usr/local/bin/image2nord"]
+ENTRYPOINT ["/usr/local/bin/midna"]
