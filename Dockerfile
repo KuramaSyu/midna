@@ -1,5 +1,5 @@
 # Use a pre-built Docker image with cargo-chef and the Rust toolchain
-FROM lukemathwalker/cargo-chef:latest-rust-1.79.0 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.84-alpine AS chef
 WORKDIR /app
 
 # Prepare the build environment using cargo-chef
