@@ -1,4 +1,5 @@
 # Use a pre-built Docker image with cargo-chef and the Rust toolchain
+# the cargo-shef should use a Bookworm version. Alpine does not compile
 FROM lukemathwalker/cargo-chef:latest-rust-1.84-bookworm AS chef
 WORKDIR /app
 
